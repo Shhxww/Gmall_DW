@@ -1,5 +1,6 @@
 import Gmall_fs.bean.TableProcessDim;
 import Gmall_fs.constant.Constant;
+import Gmall_fs.util.HbaseUtil;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.ververica.cdc.connectors.mysql.source.MySqlSource;
@@ -14,6 +15,7 @@ import org.apache.flink.api.common.restartstrategy.RestartStrategies;
 import org.apache.flink.api.common.serialization.DeserializationSchema;
 import org.apache.flink.api.common.time.Time;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.KafkaSourceBuilder;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
@@ -22,10 +24,18 @@ import org.apache.flink.streaming.api.datastream.DataStreamSource;
 import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.CheckpointConfig;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.http.client.RedirectStrategy;
 
 import java.io.IOException;
 import java.util.Properties;
+
+
+/**
+ * 需要启动的服务
+ *      hdfs、zk、kafka、hbase、mysql、yarn、maxwell、、、
+ */
 
 public class DimAPP {
     public static void main(String[] args) throws Exception {
@@ -100,31 +110,68 @@ public class DimAPP {
                 .build();
 //        4.3   封装成流(并行度要设置成1，不然会导致配置流出现乱序，无法同步)
         DataStreamSource<String> gmall_config = env.fromSource(gmallConfig, WatermarkStrategy.noWatermarks(), "Gmall_config").setParallelism(1);
-//         4.4  将读取到的配置数据进行转换
+//        gmall_config.print();
+
+ //       4.4  将读取到的配置数据进行转换
         SingleOutputStreamOperator<TableProcessDim> tpDS = gmall_config.map(
-                new RichMapFunction<String, TableProcessDim>() {
+                new MapFunction<String, TableProcessDim>() {
                     @Override
                     public TableProcessDim map(String jsonStr) throws Exception {
 //                        将json字符串转换成Json实体类
                         JSONObject jsonObject = JSON.parseObject(jsonStr);
 //                        提取出操作类型
                         String op = jsonObject.getString("op");
-                        TableProcessDim tableProcessDim = null;
+                        TableProcessDim tableProcessDim;
 //                        判断是否为删除操作
                         if (op.equals("d")) {
                             tableProcessDim = jsonObject.getObject("before", TableProcessDim.class);
-                            return tableProcessDim;
                         } else {
                             tableProcessDim = jsonObject.getObject("after", TableProcessDim.class);
-                            return tableProcessDim;
+
                         }
+
+                        tableProcessDim.setOp(op);
+                        return tableProcessDim;
                     }
                 }
-        );
-        tpDS.print();
+        ).setParallelism(1);
+//        tpDS.print();
 
+//        TODO  5、 根据配置流在Hbase中创建维度表
+//        5.1
+        tpDS.map(
+                new RichMapFunction<TableProcessDim, TableProcessDim>() {
+                    private Connection hbaseConnection = null;
 
-//        gmall_config.print();
+                    @Override
+                    public void open(Configuration parameters) throws Exception {
+                        hbaseConnection = HbaseUtil.createConnection();
+                    }
+
+                    @Override
+                    public void close() throws Exception {
+                        HbaseUtil.closeConnection(hbaseConnection);
+                    }
+
+                    @Override
+                    public TableProcessDim map(TableProcessDim tableProcessDim) throws Exception {
+//
+                        String op = tableProcessDim.getOp();
+                        String sinkTable = tableProcessDim.getSinkTable();
+                        String[] columnS = tableProcessDim.getSinkColumns().split(",");
+
+                        if (op.equals("d")) {
+                            HbaseUtil.dropTable(hbaseConnection, Constant.HBASE_NAMESPACE, sinkTable);
+                        } else if (op.equals("r") || op.equals("c")) {
+                            HbaseUtil.createTable(hbaseConnection, Constant.HBASE_NAMESPACE, sinkTable, columnS);
+                        } else if (op.equals("u")) {
+                            HbaseUtil.dropTable(hbaseConnection, Constant.HBASE_NAMESPACE, sinkTable);
+                            HbaseUtil.createTable(hbaseConnection, Constant.HBASE_NAMESPACE, sinkTable, columnS);
+                        }
+
+                        return tableProcessDim;
+                    }
+                });
 
 
         env.execute();
