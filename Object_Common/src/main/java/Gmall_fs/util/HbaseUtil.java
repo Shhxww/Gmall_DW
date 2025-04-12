@@ -1,11 +1,13 @@
 package Gmall_fs.util;
 
+import com.alibaba.fastjson.JSONObject;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.util.Bytes;
 
 import java.io.IOException;
+import java.util.Set;
 
 public class HbaseUtil {
 
@@ -41,7 +43,7 @@ public class HbaseUtil {
             TableName tableName1 = TableName.valueOf(namepace, tableName);
 //            判断表是否已经存在
             if(admin.tableExists(tableName1)) {
-                System.out.println("表已经存在");
+                System.out.println("表"+tableName+"已经存在");
                 return ;
             }
 //            创建表描述器
@@ -101,5 +103,53 @@ public class HbaseUtil {
         }
     }
 
+    /**
+     * 向Hbase插入数据
+     * @param hbaseconnection Hbase连接
+     * @param namepace  命名空间
+     * @param tableName 表名
+     * @param rowkey    行键
+     * @param columnFamily  列族
+     * @param jsonObject 数据集合类
+     */
+    public static void putRow(Connection hbaseconnection, String namepace, String tableName, String rowkey ,String columnFamily, JSONObject jsonObject){
+        TableName tableName1 = TableName.valueOf(namepace, tableName);
+        try (Table table = hbaseconnection.getTable(tableName1)){
+
+            Put put = new Put(Bytes.toBytes(rowkey));
+
+            Set<String> columns = jsonObject.keySet();
+
+            for (String column : columns) {
+                if (jsonObject.getString(column)!=null) {
+                    String value = jsonObject.getString(column);
+                    put.addColumn(Bytes.toBytes(columnFamily), Bytes.toBytes(column), Bytes.toBytes(value));
+                }
+            }
+            table.put(put);
+            System.out.println("成功向"+namepace+"表"+tableName+"拆入数据"+jsonObject);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+    }
+
+    /**
+     * 使Hbase删除数据
+     * @param hbaseconnection hbase连接
+     * @param namepace  命名空间
+     * @param tableName 表名
+     * @param rowkey        行键
+     */
+    public static void deleteRow(Connection hbaseconnection, String namepace, String tableName, String rowkey){
+        TableName tableName1 = TableName.valueOf(namepace, tableName);
+        try (Table table = hbaseconnection.getTable(tableName1)){
+            Delete delete = new Delete(Bytes.toBytes(rowkey));
+            table.delete(delete);
+            System.out.println("成功向"+namepace+"表"+tableName+"删除数据");
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
 
 }
