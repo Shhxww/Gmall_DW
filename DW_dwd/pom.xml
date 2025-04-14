@@ -10,7 +10,12 @@
     </parent>
 
     <artifactId>DW_dwd</artifactId>
-        <dependencies>
+    <packaging>pom</packaging>
+    <modules>
+        <module>dwd-base-log</module>
+        <module>dwd-interaction-comment-info</module>
+    </modules>
+    <dependencies>
         <dependency>
             <groupId>com.B1ue</groupId>
             <artifactId>Object_Common</artifactId>

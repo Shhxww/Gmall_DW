@@ -26,6 +26,18 @@ public class HbaseUtil {
     }
 
     /**
+     * 关闭jbase连接
+     * @param hbaseconnection hbase连接
+     * @throws IOException
+     */
+    public static void closeConnection(Connection hbaseconnection) throws IOException {
+//        判断连接是否存在
+        if (hbaseconnection != null && !hbaseconnection.isClosed()) {
+            hbaseconnection.close();
+        }
+    }
+
+    /**
      * 创建表
      * @param hbaseconnection hbase连接
      * @param namepace 命名空间
@@ -92,18 +104,6 @@ public class HbaseUtil {
     }
 
     /**
-     * 关闭jbase连接
-     * @param hbaseconnection hbase连接
-     * @throws IOException
-     */
-    public static void closeConnection(Connection hbaseconnection) throws IOException {
-//        判断连接是否存在
-        if (hbaseconnection != null && !hbaseconnection.isClosed()) {
-            hbaseconnection.close();
-        }
-    }
-
-    /**
      * 向Hbase插入数据
      * @param hbaseconnection Hbase连接
      * @param namepace  命名空间
@@ -127,7 +127,7 @@ public class HbaseUtil {
                 }
             }
             table.put(put);
-            System.out.println("成功向"+namepace+"表"+tableName+"拆入数据"+jsonObject);
+            System.out.println("成功向Hbase的"+namepace+"表"+tableName+"插入数据"+jsonObject);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -135,7 +135,7 @@ public class HbaseUtil {
     }
 
     /**
-     * 使Hbase删除数据
+     * 从Hbase删除数据
      * @param hbaseconnection hbase连接
      * @param namepace  命名空间
      * @param tableName 表名
@@ -146,7 +146,7 @@ public class HbaseUtil {
         try (Table table = hbaseconnection.getTable(tableName1)){
             Delete delete = new Delete(Bytes.toBytes(rowkey));
             table.delete(delete);
-            System.out.println("成功向"+namepace+"表"+tableName+"删除数据");
+            System.out.println("成功从Hbase的"+namepace+"表"+tableName+"删除数据");
         } catch (IOException e) {
             e.printStackTrace();
         }

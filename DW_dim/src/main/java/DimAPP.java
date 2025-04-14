@@ -1,3 +1,4 @@
+import Gmall_fs.base.BaseApp;
 import Gmall_fs.bean.TableProcessDim;
 import Gmall_fs.constant.Constant;
 import Gmall_fs.util.FlinkSourceUtil;
@@ -50,63 +51,13 @@ import java.util.Properties;
  *      hdfsyarn、zk、kafka、hbase、mysql、maxwell、、、
  */
 
-public class DimAPP {
+public class DimAPP extends BaseApp {
     public static void main(String[] args) throws Exception {
-//        TODO 1、 设置初始环境
-//        1.1 创建初始环境
-        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-//        1.2 设置程序全局并行度
-        env.setParallelism(4);
+        new DimAPP().start(10011,4,Constant.TOPIC_DB,"dim_app_group");
+    }
 
-//        TODO 2、 配置检查点、重启策略
-//        2.1   启用检查点
-        env.enableCheckpointing(5000L, CheckpointingMode.EXACTLY_ONCE);
-//        2.2   设置检查点超时时间
-        env.getCheckpointConfig().setCheckpointTimeout(60000L);
-//        2.3   设置检查点间隔时间
-        env.getCheckpointConfig().setMinPauseBetweenCheckpoints(2000L);
-//        2.4   设置检查点在任务结束后进行保存，及其保存路径(保存在hdfs上要指定有权限的用户)
-        env.getCheckpointConfig().setExternalizedCheckpointCleanup(CheckpointConfig.ExternalizedCheckpointCleanup.RETAIN_ON_CANCELLATION);
-        System.setProperty("HADOOP_USER_NAME", "root");
-        env.getCheckpointConfig().setCheckpointStorage("hdfs://node1:8020/Flink_checkpoint/");
-//        2.5   设置重启策略（每3s重启一次，30天内仅能重启三次）
-        env.setRestartStrategy(RestartStrategies.failureRateRestart(1, Time.days(3),Time.seconds(3)));
-
-//        TODO  3、读取kafka上的业务数据
-//        3.1   创建一个kafka对象
-        KafkaSource<String> kafkaSource = FlinkSourceUtil.getkafkaSource(Constant.TOPIC_DB,"dim_app_group");
-
-
-
-                KafkaSource
-                .<String>builder()
-                .setBootstrapServers(Constant.KAFKA_BROKERS)
-                .setTopics(Constant.TOPIC_DB)
-                .setGroupId("dim_app_group")
-                .setStartingOffsets(OffsetsInitializer.latest())
-                .setValueOnlyDeserializer(new DeserializationSchema<String>() {
-                    @Override
-                    public String deserialize(byte[] bytes) throws IOException {
-                        if (bytes != null) {
-                            return new String(bytes);
-                        }
-                        return null;
-                    }
-                    @Override
-                    public boolean isEndOfStream(String s) {
-                        return false ;
-                    }
-
-                    @Override
-                    public TypeInformation<String> getProducedType() {
-                        return TypeInformation.of(String.class);
-                    }
-                })
-                .build();
-//        3.2   封装成流
-        DataStreamSource<String> kafkaDS = env.fromSource(kafkaSource, WatermarkStrategy.noWatermarks(), "KafkaDS");
-//        kafkaDS.print();
-
+    @Override
+    public void handle(StreamExecutionEnvironment env, DataStreamSource<String> kafkaDS) {
 //        3.3   将Json字符串数据流进行转换成jsonObj主流
         SingleOutputStreamOperator<JSONObject> datastream = kafkaDS.map(new RichMapFunction<String, JSONObject>() {
             @Override
@@ -116,27 +67,10 @@ public class DimAPP {
             }
         });
 
-        datastream.print();
-
-
 //        TODO  4、 配置流
-//       4.1    配置mysqlcdc
-        Properties  jdbcProperties = new Properties();
-        jdbcProperties.setProperty("useSSL", "false");
-        jdbcProperties.setProperty("allowPublicKeyRetrieval", "true");
-//        4.2   配置mysql设置
-        MySqlSource<String> gmallConfig = MySqlSource
-                .<String>builder()
-                .hostname(Constant.MYSQL_HOST)
-                .port(Constant.MYSQL_PORT)
-                .databaseList("gmall_config")
-                .tableList("gmall_config.gmall_config")     // 切记要带数据库，不然查找不到
-                .username(Constant.MYSQL_USER_NAME)
-                .password(Constant.MYSQL_PASSWORD)
-                .jdbcProperties(jdbcProperties)
-                .startupOptions(StartupOptions.initial())  // 默认值: initial  第一次启动读取所有数据(快照), 然后通过 binlog 实时监控变化数据
-                .deserializer(new JsonDebeziumDeserializationSchema())
-                .build();
+//       4.1    配置mysqlCDC
+        MySqlSource<String> gmallConfig = FlinkSourceUtil.getMySqlSource("gmall_config","gmall_config") ;
+
 //        4.3   封装成流(并行度要设置成1，不然会导致配置流出现乱序，无法同步)
         DataStreamSource<String> gmall_config = env.fromSource(gmallConfig, WatermarkStrategy.noWatermarks(), "Gmall_config").setParallelism(1);
 //        gmall_config.print();
@@ -224,6 +158,13 @@ public class DimAPP {
                 }
             }
 
+            /**
+             * 对广播流进行处理，将配置信息放入广播状态中去
+             * @param tableProcessDim
+             * @param context
+             * @param collector
+             * @throws Exception
+             */
             @Override
             public void processBroadcastElement(TableProcessDim tableProcessDim, BroadcastProcessFunction<JSONObject, TableProcessDim, Tuple3<String, JSONObject, TableProcessDim>>.Context context, Collector<Tuple3<String, JSONObject, TableProcessDim>> collector) throws Exception {
                 BroadcastState<String, TableProcessDim> broadcastState = context.getBroadcastState(broadcastDs);
@@ -239,7 +180,6 @@ public class DimAPP {
             }
         });
         dimDS.print();
-
 
 //        TODO  8、  根据维度表数据流对Hbase进行维度表操作
 
@@ -277,9 +217,6 @@ public class DimAPP {
 
 
         });
-
-        env.execute();
-
 
     }
 }
