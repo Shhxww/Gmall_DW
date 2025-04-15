@@ -43,8 +43,8 @@ public class DwdBaseLog extends BaseApp {
                 }
             }
         });
-        process.print("主流：");
-        process.getSideOutput(dirtyData).print("脏数据：");
+//        process.print("主流：");
+//        process.getSideOutput(dirtyData).print("脏数据：");
 
 //        1.3   脏数据侧道输出至kafka的脏数据topic中备用
         process.getSideOutput(dirtyData).sinkTo(FlinkSinkUtil.getKafkaSink("dirty_data"));
@@ -155,6 +155,7 @@ public class DwdBaseLog extends BaseApp {
         pageDS.getSideOutput(displayTag).sinkTo(FlinkSinkUtil.getKafkaSink(Constant.TOPIC_DWD_TRAFFIC_DISPLAY));
         pageDS.getSideOutput(actionTag).sinkTo(FlinkSinkUtil.getKafkaSink(Constant.TOPIC_DWD_TRAFFIC_ACTION));
 
+        pageDS.sinkTo(FlinkSinkUtil.getKafkaSink(Constant.TOPIC_DWD_TRAFFIC_PAGE));
 
 
     }

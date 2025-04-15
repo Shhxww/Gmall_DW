@@ -49,7 +49,8 @@ public class DwdTradeCartAdd extends BaseSQLApp {
                             "   user_id string," +
                             "   sku_id string," +
                             "   sku_num int, " +
-                            "   ts  bigint " +
+                                "ts bigint," +
+                                "primary key(id) not enforced " +
                             ")"+FlinkSQlUtil.getUpsetKafkaDDLSink(Constant.TOPIC_DWD_TRADE_CART_ADD));
 
 //        TODO  将过滤出来的数据插入到映射表中去

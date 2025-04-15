@@ -60,7 +60,8 @@ public class DwdInteractionCommentInfo extends BaseSQLApp {
                             "appraise string," +
                             "appraise_name string," +
                             "comment_txt string," +
-                            "ts bigint " +
+                            "ts bigint, " +
+                            "primary key(id) not enforced " +
                             ")"+FlinkSQlUtil.getUpsetKafkaDDLSink(Constant.TOPIC_DWD_INTERACTION_COMMENT_INFO));
 
 //        将下沉完的评论表数据输出到kafka映射表上

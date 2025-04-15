@@ -10,7 +10,22 @@
     </parent>
 
     <artifactId>DW_dws</artifactId>
-        <dependencies>
+    <packaging>pom</packaging>
+    <modules>
+        <module>dws-traffic-source-keyword-page-view-window</module>
+        <module>dws-traffic-vc-ch-ar-is_new-page-view-window</module>
+        <module>dws-trade-sku-order-window</module>
+        <module>dws-traffic-home-detail-page-view-window</module>
+        <module>dws-user-user-login-window</module>
+        <module>dws-trade-cart-add-uu-window</module>
+        <module>dws-user-user-register-window</module>
+        <module>dws-trade-payment-suc-window</module>
+        <module>dws-trade-order-window</module>
+        <module>dws-trade-province-order-window</module>
+        <module>dws-trade-trademark-category-user-refund-window</module>
+        <module>dws-trade-sku-order-window</module>
+    </modules>
+    <dependencies>
         <dependency>
             <groupId>com.B1ue</groupId>
             <artifactId>Object_Common</artifactId>
