@@ -69,7 +69,7 @@ public class DimAPP extends BaseApp {
 
 //        TODO  4、 配置流
 //       4.1    配置mysqlCDC
-        MySqlSource<String> gmallConfig = FlinkSourceUtil.getMySqlSource("gmall_config","gmall_config") ;
+        MySqlSource<String> gmallConfig = FlinkSourceUtil.getMySqlSource("gmall_config","table_process_dwd") ;
 
 //        4.3   封装成流(并行度要设置成1，不然会导致配置流出现乱序，无法同步)
         DataStreamSource<String> gmall_config = env.fromSource(gmallConfig, WatermarkStrategy.noWatermarks(), "Gmall_config").setParallelism(1);

@@ -14,7 +14,7 @@ public class DwdInteractionCommentInfo extends BaseSQLApp {
     @Override
     public void handle(StreamExecutionEnvironment env, StreamTableEnvironment tEnv) {
 //        创建一个kafka映射表, 读取业务数据
-        FlinkSQlUtil.readOdsdata(tEnv,Constant.TOPIC_DWD_INTERACTION_COMMENT_INFO);
+        FlinkSQlUtil.readOdsData(tEnv,Constant.TOPIC_DWD_INTERACTION_COMMENT_INFO);
 
 //        从Ods数据里过滤出评论表数据
         Table commentInfo = tEnv.sqlQuery(
@@ -37,12 +37,7 @@ public class DwdInteractionCommentInfo extends BaseSQLApp {
         tEnv.createTemporaryView("comment_info", commentInfo);
 
 //        读取hbase上的字典维度表数据
-        tEnv.executeSql("create table base_dic (" +
-                                    " dic_code string," +  // 如果字段是原子类型,则表示这个是 rowKey, 字段随意, 字段类型随意
-                                    " info row<dic_name string>, " +  // 字段名和 hbase 中的列族名保持一致. 类型必须是 row. 嵌套进去的就是列
-                                    " primary key (dic_code) not enforced " + // 只能用 rowKey 做主键
-                                    ")\n"+FlinkSQlUtil.getHbaseDDLSource("dim_base_dic")
-        );
+        FlinkSQlUtil.readHbaseDic(tEnv);
 
 //        进行look join维度下沉
         Table result = tEnv.sqlQuery("select " +

@@ -32,10 +32,13 @@ public class FlinkSQlUtil {
 
     public static String getUpsetKafkaDDLSink(String topic ){
         return "with(" +
-                            "  'connector' = 'kafka'," +
+                            "  'connector' = 'upsert-kafka'," +
                             "  'topic' = '" + topic + "'," +
                             "  'properties.bootstrap.servers' = '" + Constant.KAFKA_BROKERS + "'," +
-                            "  'format' = 'json' " +
+                            "  'key.json.ignore-parse-errors' = 'true'," +
+                            "  'value.json.ignore-parse-errors' = 'true'," +
+                            "  'key.format' = 'json', " +
+                            "  'value.format' = 'json' " +
                             ")";
     }
 
@@ -44,7 +47,7 @@ public class FlinkSQlUtil {
      * @param tEnv  流动表环境
      * @param group_id  消费组id
      */
-    public static void readOdsdata(StreamTableEnvironment tEnv, String group_id ){
+    public static void readOdsData(StreamTableEnvironment tEnv, String group_id ){
         tEnv.executeSql("create table topic_db (" +
                             "  `database` string, " +
                             "  `table` string, " +
@@ -56,6 +59,15 @@ public class FlinkSQlUtil {
                             "  et as to_timestamp_ltz(ts, 0), " +
                             "  watermark for et as et - interval '3' second " +
                             ") "+ FlinkSQlUtil.getKafkaDDLSource(Constant.TOPIC_DB, group_id)
+        );
+    }
+
+    public static void readHbaseDic(StreamTableEnvironment tEnv){
+        tEnv.executeSql("create table base_dic (" +
+                                    " dic_code string," +  // 如果字段是原子类型,则表示这个是 rowKey, 字段随意, 字段类型随意
+                                    " info row<dic_name string>, " +  // 字段名和 hbase 中的列族名保持一致. 类型必须是 row. 嵌套进去的就是列
+                                    " primary key (dic_code) not enforced " + // 只能用 rowKey 做主键
+                                    ")\n"+FlinkSQlUtil.getHbaseDDLSource("dim_base_dic")
         );
     }
 
