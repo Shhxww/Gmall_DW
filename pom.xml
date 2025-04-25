@@ -135,12 +135,6 @@
         <version>${flink.version}</version>
         <scope>provided</scope>
     </dependency>
-        <dependency>
-            <groupId>com.B1ue</groupId>
-            <artifactId>Object_Common</artifactId>
-            <version>1.0-SNAPSHOT</version>
-            <scope>compile</scope>
-        </dependency>
 
     </dependencies>
 

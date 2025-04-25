@@ -22,7 +22,11 @@ import org.apache.flink.util.OutputTag;
 
 public class DwdBaseLog extends BaseApp {
     public static void main(String[] args) {
-        new DwdBaseLog().start(1002,4,Constant.TOPIC_LOG,"dwd-log-consumer");
+        new DwdBaseLog().start(
+                1002,
+                4,
+                Constant.TOPIC_LOG,
+                "dwd-log-consumer");
     }
 
     @Override
