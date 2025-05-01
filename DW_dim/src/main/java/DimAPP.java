@@ -45,21 +45,29 @@ import org.apache.flink.api.java.tuple.Tuple3;
 import java.io.IOException;
 import java.util.Properties;
 
-
 /**
- * 需要启动的服务
- *      hdfsyarn、zk、kafka、hbase、mysql、maxwell、、、
- */
+ * @基本功能:   实时将dim维度表，表数据更新至Hbase
+ * @program:Gmall_DW
+ * @author: B1ue
+ * @createTime:2025-04-13 23:03:17
+ **/
 
 public class DimAPP extends BaseApp {
+
     public static void main(String[] args) throws Exception {
-        new DimAPP().start(10011,4,Constant.TOPIC_DB,"dim_app_group");
+//        启动程序
+        new DimAPP().start(
+                10011,
+                4,
+                Constant.TOPIC_DB,
+                "dim_app_group"
+        );
     }
 
     @Override
     public void handle(StreamExecutionEnvironment env, DataStreamSource<String> kafkaDS) {
-//        3.3   将Json字符串数据流进行转换成jsonObj主流
-        SingleOutputStreamOperator<JSONObject> datastream = kafkaDS.map(new RichMapFunction<String, JSONObject>() {
+//        TODO   1、将Json字符串数据流进行转换成jsonObj主流
+        SingleOutputStreamOperator<JSONObject> jsonObj = kafkaDS.map(new RichMapFunction<String, JSONObject>() {
             @Override
             public JSONObject map(String jsonstr) throws Exception {
                 JSONObject jsonObject = JSON.parseObject(jsonstr);
@@ -67,15 +75,14 @@ public class DimAPP extends BaseApp {
             }
         });
 
-//        TODO  4、 配置流
-//       4.1    配置mysqlCDC
+//        TODO  2、读取维度表配置流
+//        配置mysqlCDC
         MySqlSource<String> gmallConfig = FlinkSourceUtil.getMySqlSource("gmall_config","table_process_dwd") ;
 
-//        4.3   封装成流(并行度要设置成1，不然会导致配置流出现乱序，无法同步)
+//        封装成流(并行度要设置成1，不然会导致配置流出现乱序，无法同步)
         DataStreamSource<String> gmall_config = env.fromSource(gmallConfig, WatermarkStrategy.noWatermarks(), "Gmall_config").setParallelism(1);
-//        gmall_config.print();
 
- //       4.4  将读取到的配置数据进行转换
+//        将读取到的配置数据进行转换（设置并行度为1）
         SingleOutputStreamOperator<TableProcessDim> tpDS = gmall_config.map(
                 new MapFunction<String, TableProcessDim>() {
                     @Override
@@ -91,35 +98,42 @@ public class DimAPP extends BaseApp {
                         } else {
                             tableProcessDim = jsonObject.getObject("after", TableProcessDim.class);
                         }
-
+//                        设置维度表更新的操作类型
                         tableProcessDim.setOp(op);
                         return tableProcessDim;
                     }
                 }
         ).setParallelism(1);
-//        tpDS.print();
 
-//        TODO  5、 根据配置流在Hbase中创建维度表
+//        TODO  3、根据配置流在Hbase中 创建 / 删除 维度表
         tpDS.map(
                 new RichMapFunction<TableProcessDim, TableProcessDim>() {
+//                    创建HBase连接
                     private Connection hbaseConnection = null;
 
                     @Override
                     public void open(Configuration parameters) throws Exception {
+//                        获取HBase连接
                         hbaseConnection = HbaseUtil.createConnection();
                     }
 
                     @Override
                     public void close() throws Exception {
+//                        程序结束，关闭HBase连接
                         HbaseUtil.closeConnection(hbaseConnection);
                     }
 
                     @Override
                     public TableProcessDim map(TableProcessDim tableProcessDim) throws Exception {
-//
+//                        获取操作类型
                         String op = tableProcessDim.getOp();
+//                        获取操作表名
                         String sinkTable = tableProcessDim.getSinkTable();
+//                        获取输出字段
                         String[] columnS = tableProcessDim.getSinkFamily().split(",");
+//                        若操作类型为删除则删除目标维度表、
+//                        若操作类型为写入或创建，则创建维度表、
+//                        若操作为更新则删除维度表再进行创建
                         if (op.equals("d")) {
                             HbaseUtil.dropTable(hbaseConnection, Constant.HBASE_NAMESPACE, sinkTable);
                         } else if (op.equals("r") || op.equals("c")) {
@@ -128,20 +142,22 @@ public class DimAPP extends BaseApp {
                             HbaseUtil.dropTable(hbaseConnection, Constant.HBASE_NAMESPACE, sinkTable);
                             HbaseUtil.createTable(hbaseConnection, Constant.HBASE_NAMESPACE, sinkTable, columnS);
                         }
-
                         return tableProcessDim;
                     }
-                });
+                }
+                );
 
-//        TODO  6、  将配置流转换为广播流
-//        6.1   创建一个广播流描述器
+//        TODO  4、  将配置流转换为广播流
+//        创建一个广播流描述器
         MapStateDescriptor<String, TableProcessDim> broadcastDs = new MapStateDescriptor<>("broadcastDs", String.class, TableProcessDim.class);
-
+//        创建广播流
         BroadcastStream<TableProcessDim> broadcast = tpDS.broadcast(broadcastDs);
 
-//        TODO  7、  将广播流和主流进行合并，并进行筛选出维度表数据放入下游
-        SingleOutputStreamOperator<Tuple3<String, JSONObject, TableProcessDim>> dimDS = datastream.connect(broadcast).process(new BroadcastProcessFunction<JSONObject, TableProcessDim, Tuple3<String, JSONObject, TableProcessDim>>() {
+//        TODO  5、  将广播流和主流进行合并，并进行筛选出维度表数据放入下游
+        SingleOutputStreamOperator<Tuple3<String, JSONObject, TableProcessDim>> dimDS = jsonObj.connect(broadcast)
+                .process(new BroadcastProcessFunction<JSONObject, TableProcessDim, Tuple3<String, JSONObject, TableProcessDim>>() {
 
+//            从业务数据流过滤出维度表的数据
             @Override
             public void processElement(JSONObject jsonObject, BroadcastProcessFunction<JSONObject, TableProcessDim, Tuple3<String, JSONObject, TableProcessDim>>.ReadOnlyContext readOnlyContext, Collector<Tuple3<String, JSONObject, TableProcessDim>> collector) throws Exception {
                 ReadOnlyBroadcastState<String, TableProcessDim> broadcastState = readOnlyContext.getBroadcastState(broadcastDs);
@@ -160,7 +176,7 @@ public class DimAPP extends BaseApp {
 
             /**
              * 对广播流进行处理，将配置信息放入广播状态中去
-             * @param tableProcessDim
+             * @param tableProcessDim   维度表配置类
              * @param context
              * @param collector
              * @throws Exception
@@ -176,13 +192,10 @@ public class DimAPP extends BaseApp {
 //                    若操作类型为添加、更改、读取，则从广播状态中添加这条状态
                     broadcastState.put(tableProcessDim.getSourceTable(), tableProcessDim);
                 }
-
             }
         });
-        dimDS.print();
 
-//        TODO  8、  根据维度表数据流对Hbase进行维度表操作
-
+//        TODO  6、  根据维度表数据流对Hbase进行维度表操作
         dimDS.addSink(new RichSinkFunction<Tuple3<String, JSONObject, TableProcessDim>>() {
 
             private Connection hbaseConnection = null;
@@ -199,11 +212,17 @@ public class DimAPP extends BaseApp {
 
             @Override
             public void invoke(Tuple3<String, JSONObject, TableProcessDim> tp3, Context context) throws Exception {
+//                获取操作类型
                 String type = tp3.f0;
+//                获取数据
                 JSONObject jsonObject = tp3.f1;
+//                获取维度表配置类
                 TableProcessDim tableProcessDim = tp3.f2;
+//                获取插入的rowkey
                 String rowkey = jsonObject.getString(tableProcessDim.getSinkRowKey());
+//                获取目标命名空间
                 String namespace = Constant.HBASE_NAMESPACE;
+//                获取目标表名
                 String tableName = tableProcessDim.getSinkTable();
                 if ("delete".equals(type)) {
 //                    若操作类型为删除，则删除Hbase中维度表的这条数据
@@ -212,10 +231,7 @@ public class DimAPP extends BaseApp {
 //                    若操作类型不为删除（添加，更改，读取），则向Hbase维度表中添加这条数据
                     HbaseUtil.putRow(hbaseConnection,namespace,tableName,rowkey,tableProcessDim.getSinkFamily(),jsonObject);
                 }
-
             }
-
-
         });
 
     }

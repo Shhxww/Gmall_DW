@@ -33,7 +33,7 @@ import org.apache.flink.util.StringUtils;
 import java.time.Duration;
 
 /**
- * @基本功能:
+ * @基本功能:   流量域--当天独立用户窗口汇总表
  * @program:Gmall_DW
  * @author: B1ue
  * @createTime:2025-04-19 16:54:13
@@ -42,6 +42,7 @@ import java.time.Duration;
 public class DwsTrafficVcChArIsNewPageViewWindow extends BaseApp {
 
     public static void main(String[] args) {
+//        启动程序
         new DwsTrafficVcChArIsNewPageViewWindow().start(
                 10021,
                 4,
@@ -58,13 +59,13 @@ public class DwsTrafficVcChArIsNewPageViewWindow extends BaseApp {
     //        "page":{"page_id":"order","item":"20","during_time":14101,"item_type":"sku_ids","last_page_id":"good_detail"},
     //        "ts":1717856903000
 //        }
- //        TODO  转化成jsonObj流
+ //        TODO  1、读取页面日志数据转化成jsonObj流
         SingleOutputStreamOperator<JSONObject> pageMap = kafkaDS.map(JSONObject::parseObject);
-//        TODO  按设备id进行分组
+//        TODO  2、按设备id进行分组
         KeyedStream<JSONObject, String> pageKB = pageMap.keyBy(jsonObject -> jsonObject.getJSONObject("common").getString("mid"));
 //        pageKB.print("pagekkk: ");
 
-//        TODO  统计各个指标，转换为TrafficPageViewBean数据类型
+//        TODO  3、统计各个指标，转换为TrafficPageViewBean数据类型
         SingleOutputStreamOperator<TrafficPageViewBean> beanDS = pageKB.map(new RichMapFunction<JSONObject, TrafficPageViewBean>() {
 //            定义一个状态，接收设备最后一次访问的时间
             private ValueState<String> lastVisitDateState;
@@ -118,7 +119,7 @@ public class DwsTrafficVcChArIsNewPageViewWindow extends BaseApp {
             }
         });
 
-//        TODO  设置水位线
+//        TODO  4、设置水位线
         SingleOutputStreamOperator<TrafficPageViewBean> beanW = beanDS.assignTimestampsAndWatermarks(
                 WatermarkStrategy
                         .<TrafficPageViewBean>forBoundedOutOfOrderness(Duration.ofSeconds(3L))
@@ -129,12 +130,12 @@ public class DwsTrafficVcChArIsNewPageViewWindow extends BaseApp {
                             }
                         })
         );
-//        TODO  按照维度分组
+//        TODO  5、按照维度分组
         KeyedStream<TrafficPageViewBean, String> beankeyed = beanW.keyBy(bean -> bean.getVc() + "_" + bean.getCh() + "_" + bean.getAr() + "_" + bean.getIsNew());
 //        beankeyed.print();
-//        TODO  开窗
+//        TODO  6、开窗
         WindowedStream<TrafficPageViewBean, String, TimeWindow> window = beankeyed.window(TumblingEventTimeWindows.of(org.apache.flink.streaming.api.windowing.time.Time.seconds(5L)));
-//        TODO  进行聚合
+//        TODO  7、进行聚合
         SingleOutputStreamOperator<TrafficPageViewBean> result = window.reduce(new ReduceFunction<TrafficPageViewBean>() {
                 @Override
                 public TrafficPageViewBean reduce(TrafficPageViewBean value1, TrafficPageViewBean value2) throws Exception {
@@ -155,7 +156,7 @@ public class DwsTrafficVcChArIsNewPageViewWindow extends BaseApp {
                 }
             });
 
-//        TODO  写入doris
+//        TODO  8、写入doris
         result.map(new DorisMapFunction<TrafficPageViewBean>()).sinkTo(FlinkSinkUtil.getDorisSink("gmall.dws_traffic_vc_ch_ar_is_new_page_view_window"));
     }
 }

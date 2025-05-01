@@ -33,7 +33,7 @@ import java.util.concurrent.TimeUnit;
 import static org.apache.flink.streaming.api.windowing.time.Time.seconds;
 
 /**
- * @基本功能:    下单轻度汇总表（维度：商品id，数值：原始金额、活动减免、优惠劵减免、实付金额）
+ * @基本功能:    交易域--SKU粒度下单窗口汇总表
  * @program:Gmall_DW
  * @author: B1ue
  * @createTime:2025-04-20 21:58:32
@@ -42,6 +42,7 @@ import static org.apache.flink.streaming.api.windowing.time.Time.seconds;
 public class DwsTradeSkuOrderWindowSyncCache extends BaseApp {
 
     public static void main(String[] args) {
+//        启动程序
         new DwsTradeSkuOrderWindowSyncCache()
                 .start(
                         10029,
@@ -71,7 +72,7 @@ public class DwsTradeSkuOrderWindowSyncCache extends BaseApp {
 //              "ts":1745216790
 //              }
 
- //    TODO  读取下单事实表数据，过滤掉空值，封装成jsonObj
+ //    TODO  1、读取下单事实表数据，过滤掉空值，封装成jsonObj
         SingleOutputStreamOperator<JSONObject> jsonObjDS = kafkaDS.process(new ProcessFunction<String, JSONObject>() {
             @Override
             public void processElement(String jsonStr, ProcessFunction<String, JSONObject>.Context ctx, Collector<JSONObject> out) throws Exception {
@@ -80,16 +81,19 @@ public class DwsTradeSkuOrderWindowSyncCache extends BaseApp {
                     out.collect(jsonObject);
                 }
             }
-        });
-//    TODO  按照订单明细 id分组
+        }
+        );
+//    TODO  2、按照订单明细 id分组
         KeyedStream<JSONObject, String> jsonObjkeyed = jsonObjDS.keyBy(jsonObj -> jsonObj.getString("id"));
-//    TODO  对数据进行去重，并将数据转换成统计类型
-        SingleOutputStreamOperator<TradeSkuOrderBean> tradeSkuDS = jsonObjkeyed.map(new RichMapFunction<JSONObject, TradeSkuOrderBean>() {
 
+//    TODO  3、对数据进行去重，并将数据转换成统计类型
+        SingleOutputStreamOperator<TradeSkuOrderBean> tradeSkuDS = jsonObjkeyed.map(new RichMapFunction<JSONObject, TradeSkuOrderBean>() {
+//            创建键值状态，保存上一条数据
             ValueState<TradeSkuOrderBean> tradeSkuOrderBeanValueState;
 
             @Override
             public void open(Configuration parameters) throws Exception {
+//                对状态进行初始化，启用状态生存周期设置，并设置为10s
                 ValueStateDescriptor<TradeSkuOrderBean> stateProperties = new ValueStateDescriptor<TradeSkuOrderBean>("tradeSkuOrderBean", TradeSkuOrderBean.class);
                 stateProperties.enableTimeToLive(new StateTtlConfig.Builder(org.apache.flink.api.common.time.Time.seconds(10)).build());
                 tradeSkuOrderBeanValueState = getRuntimeContext().getState(stateProperties);
@@ -97,7 +101,9 @@ public class DwsTradeSkuOrderWindowSyncCache extends BaseApp {
 
             @Override
             public TradeSkuOrderBean map(JSONObject obj) throws Exception {
+//                获取状态值
                 TradeSkuOrderBean laststate = tradeSkuOrderBeanValueState.value();
+//                当状态内值不为空，说明这是一条重复数据，需要进行处理，将度量值减去上一条数据的度量值，后续进行聚合
                 if (laststate != null) {
                     TradeSkuOrderBean skuOrderBean =
                             TradeSkuOrderBean
@@ -113,6 +119,7 @@ public class DwsTradeSkuOrderWindowSyncCache extends BaseApp {
                      tradeSkuOrderBeanValueState.update(skuOrderBean);
                     return skuOrderBean;
                 } else {
+//                    当状态内值为空，说明这是这个key的第一条数据，直接发送到下游
                     TradeSkuOrderBean skuOrderBean =
                             TradeSkuOrderBean
                                     .builder()
@@ -129,17 +136,21 @@ public class DwsTradeSkuOrderWindowSyncCache extends BaseApp {
                 }
             }
         });
-//    TODO  设计水位线
+
+//    TODO  4、设计水位线
         SingleOutputStreamOperator<TradeSkuOrderBean> skubeanWM = tradeSkuDS
                 .assignTimestampsAndWatermarks(
                         WatermarkStrategy
                                 .<TradeSkuOrderBean>forBoundedOutOfOrderness(Duration.ofSeconds(3))
                                 .withTimestampAssigner((SerializableTimestampAssigner<TradeSkuOrderBean>) (element, recordTimestamp) -> element.getTs()));
-//    TODO  按照  分组
+
+//    TODO  5、按照商品id分组
         KeyedStream<TradeSkuOrderBean, String> skuWMkeyed = skubeanWM.keyBy(tr -> tr.getSkuId());
-//    TODO  开窗
+
+//    TODO  6、开窗
         WindowedStream<TradeSkuOrderBean, String, TimeWindow> window = skuWMkeyed.window(TumblingEventTimeWindows.of(seconds(10)));
-//    TODO  聚合
+
+//    TODO  7、聚合
         SingleOutputStreamOperator<TradeSkuOrderBean> reduce = window.reduce(new ReduceFunction<TradeSkuOrderBean>() {
             @Override
             public TradeSkuOrderBean reduce(TradeSkuOrderBean value1, TradeSkuOrderBean value2) throws Exception {
@@ -160,15 +171,17 @@ public class DwsTradeSkuOrderWindowSyncCache extends BaseApp {
             }
         });
 
-//    TODO  进行维度关联  (旁路缓存、异步 IO )
-
-//        与dim_sku_info维度表进行关联
-        SingleOutputStreamOperator<TradeSkuOrderBean> skuDIM_1 = AsyncDataStream.unorderedWait(reduce,
+//    TODO  8、进行维度关联  (旁路缓存、异步 IO )
+ //        与dim_sku_info维度表进行关联
+        SingleOutputStreamOperator<TradeSkuOrderBean> skuDIM_1 = AsyncDataStream.unorderedWait(
+                reduce,
                 new AsyncDimFunction<TradeSkuOrderBean>() {
+
                     @Override
                     public String getRowKey(TradeSkuOrderBean bean) {
                         return bean.getSkuId();
                     }
+
 
                     @Override
                     public String getTableName() {
@@ -278,14 +291,9 @@ public class DwsTradeSkuOrderWindowSyncCache extends BaseApp {
                     }
                 }, 120, TimeUnit.SECONDS);
 
-//    TODO  写入doris
+//    TODO  9、写入doris
         sku_DIM
                 .map(new DorisMapFunction<>())
                 .sinkTo(FlinkSinkUtil.getDorisSink("gmall.dws_trade_sku_order_window"));
-//    TODO
-//    TODO
-//    TODO
-//    TODO
-//    TODO
     }
 }

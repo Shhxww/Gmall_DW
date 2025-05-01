@@ -4,6 +4,13 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * @基本功能:   维度表配置类
+ * @program:Gmall_DW
+ * @author: B1ue
+ * @createTime:2025-04-13 23:42:57
+ **/
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

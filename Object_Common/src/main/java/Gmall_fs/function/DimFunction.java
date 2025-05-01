@@ -2,7 +2,7 @@ package Gmall_fs.function;
 import com.alibaba.fastjson.JSONObject;
 
 /**
- * @基本功能:
+ * @基本功能:   维度关联实现接口
  * @program:Gmall_DW
  * @author: B1ue
  * @createTime:2025-04-22 11:12:11

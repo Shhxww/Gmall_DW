@@ -6,9 +6,44 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.Table;
 import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 
+/**
+ * @基本功能:   互动域--评论事实表（每一条评论）
+ * @program:Gmall_DW
+ * @author: B1ue
+ * @createTime:2025-04-14 08:03:17
+ **/
+
+//数据样本：
+// {
+    // "database":"gmall",
+    // "table":"comment_info",
+    // "type":"delete",
+    // "ts":1746276431,
+    // "xid":50391,
+    // "xoffset":19,
+    // "data":{
+//                      "id":1861,
+//                      "user_id":3717,
+//                      "nick_name":"惠珠",
+//                      "head_img":null,
+//                      "sku_id":10,
+//                      "spu_id":3,
+//                      "order_id":19591,
+//                      "appraise":"1201",
+//                      "comment_txt":"评论内容：86916181228663234643569699182154688159573237275489",
+//                      "create_time":"2025-04-26 20:44:46",
+//                      "operate_time":null
+//                     }
+// }
+
 public class DwdInteractionCommentInfo extends BaseSQLApp {
     public static void main(String[] args)  {
-        new DwdInteractionCommentInfo().start(10012,4,Constant.TOPIC_DWD_INTERACTION_COMMENT_INFO);
+//        启动程序
+        new DwdInteractionCommentInfo().start(
+                10012,
+                4,
+                Constant.TOPIC_DWD_INTERACTION_COMMENT_INFO
+        );
     }
 
     @Override

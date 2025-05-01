@@ -16,7 +16,7 @@ import java.util.List;
 import static org.apache.flink.streaming.api.datastream.DataStreamUtils.collect;
 
 /**
- * @基本功能:   流量域---搜索关键词---页面浏览各窗口汇总表
+ * @基本功能:   流量域---搜索关键词、页面浏览各窗口汇总表
  * @program:Gmall_DW
  * @author: B1ue
  * @createTime:2025-04-19 09:18:33
@@ -25,6 +25,7 @@ import static org.apache.flink.streaming.api.datastream.DataStreamUtils.collect;
 public class DwsTrafficSourceKeywordPageViewWindow extends BaseSQLApp {
 
     public static void main(String[] args) {
+//        启动程序
         new DwsTrafficSourceKeywordPageViewWindow().start(
                 10021,
                 4,
@@ -34,14 +35,13 @@ public class DwsTrafficSourceKeywordPageViewWindow extends BaseSQLApp {
 
     @Override
     public void handle(StreamExecutionEnvironment env, StreamTableEnvironment tEnv) {
-
-//        TODO  读取页面日志数据，转化为动态
+//        数据样本
 //        {
-    //        "common":{"ar":"28","uid":"1227","os":"Android 13.0","ch":"web","is_new":"1","md":"vivo IQOO Z6x ","mid":"mid_62","vc":"v2.1.132","ba":"vivo","sid":"190c1a34-1343-41a4-ba96-670772dfb402"},
-    //        "page":{"page_id":"order","item":"20","during_time":14101,"item_type":"sku_ids","last_page_id":"good_detail"},
-    //        "ts":1717856903000
+//          "common":{"ar":"28","uid":"1227","os":"Android 13.0","ch":"web","is_new":"1","md":"vivo IQOO Z6x ","mid":"mid_62","vc":"v2.1.132","ba":"vivo","sid":"190c1a34-1343-41a4-ba96-670772dfb402"},
+//          "page":{"page_id":"order","item":"20","during_time":14101,"item_type":"sku_ids","last_page_id":"good_detail"},
+//          "ts":1717856903000
 //        }
-
+//        TODO  1、读取页面日志数据，转化为动态表
         tEnv.executeSql("create table page_log(" +
                 " page map<string, string>, " +
                 " ts bigint, " +
@@ -52,7 +52,7 @@ public class DwsTrafficSourceKeywordPageViewWindow extends BaseSQLApp {
         );
 
 
-//        TODO  读取搜索关键词
+//        TODO  2、读取搜索关键词
         Table kwTable = tEnv.sqlQuery("select " +
                 "page['item'] kw, " +
                 "et " +
@@ -64,7 +64,7 @@ public class DwsTrafficSourceKeywordPageViewWindow extends BaseSQLApp {
                 "and page['item'] is not null ");
         tEnv.createTemporaryView("kw_table", kwTable);
 
-//        TODO  自定义分词函数
+//        TODO  3、自定义分词函数
         tEnv.createTemporaryFunction("kw_split",SplitFunction.class);
         Table keywordTable = tEnv.sqlQuery(
                 "select " +
@@ -75,7 +75,7 @@ public class DwsTrafficSourceKeywordPageViewWindow extends BaseSQLApp {
 
         tEnv.createTemporaryView("keyword_table", keywordTable);
 
-//        TODO  开窗聚和 tvf
+//        TODO  4、开窗聚和 tvf
         Table result = tEnv.sqlQuery("select " +
                 " date_format(window_start, 'yyyy-MM-dd HH:mm:ss') stt, " +
                 " date_format(window_end, 'yyyy-MM-dd HH:mm:ss') edt, " +
@@ -85,7 +85,7 @@ public class DwsTrafficSourceKeywordPageViewWindow extends BaseSQLApp {
                 "from table( tumble(table keyword_table, descriptor(et), interval '5' second ) ) " +
                 "group by window_start, window_end, keyword ");
 
-//        TODO  写出到 doris 中
+//        TODO  5、创建搜索关键词、页面浏览各窗口汇总表映射表，写出到 doris 中
         tEnv.executeSql("create table dws_traffic_source_keyword_page_view_window(" +
                 "  stt string, " +
                 "  edt string, " +
@@ -105,11 +105,9 @@ public class DwsTrafficSourceKeywordPageViewWindow extends BaseSQLApp {
                 "  'sink.properties.read_json_by_line' = 'true' " +
                 ")");
         result.executeInsert("dws_traffic_source_keyword_page_view_window");
-
-
     }
 
-
+//    分词器
     @FunctionHint(output = @DataTypeHint("ROW<keyword STRING>"))
     public static class SplitFunction extends TableFunction<Row> {
       public void eval(String kw) {
@@ -120,8 +118,6 @@ public class DwsTrafficSourceKeywordPageViewWindow extends BaseSQLApp {
           }
       }
 }
-
-
 
 }
 

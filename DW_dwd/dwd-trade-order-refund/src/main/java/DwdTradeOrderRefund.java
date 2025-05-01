@@ -8,10 +8,10 @@ import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import java.time.Duration;
 
 /**
- * @基本功能:
+ * @基本功能:   交易域--订单退单事实表（一次退单操作里的一种商品）
  * @program:Gmall_DW
  * @author: B1ue
- * @createTime:2025-04-15 17:02:35
+ * @createTime:2025-04-16 10:02:35
  * 1）启动zk、kafka、maxwell
  * 2）运行DwdTradeOrderRefund
  **/
@@ -28,13 +28,13 @@ public class DwdTradeOrderRefund extends BaseSQLApp {
 
     @Override
     public void handle(StreamExecutionEnvironment env, StreamTableEnvironment tEnv) {
-//        TODO  设置ttl，防止延迟
+//        TODO  1、设置ttl，防止延迟
         tEnv.getConfig().setIdleStateRetention(Duration.ofSeconds(5));
 
-//        TODO  读取kafka上的业务数据，映射为topic_db表
+//        TODO  2、读取kafka上的业务数据，映射为topic_db表
         FlinkSQlUtil.readOdsData(tEnv,Constant.TOPIC_DWD_TRADE_ORDER_REFUND);
 
-//        TODO  过滤出退单表的数据，并映射成表
+//        TODO  3、过滤出退单表的数据，并映射成表
         Table orderRefundInfo = tEnv.sqlQuery("select " +
                 "data['id'] id," +
                 "data['user_id'] user_id," +
@@ -55,7 +55,7 @@ public class DwdTradeOrderRefund extends BaseSQLApp {
 
         tEnv.createTemporaryView("order_refund_info", orderRefundInfo);
 
-//        TODO  读取订单表数据，并映射成表
+//        TODO  4、从业务数据种过滤出 ods订单表数据，并映射成表
         Table orderInfo = tEnv.sqlQuery(
                 "select " +
                         "data['id'] id," +
@@ -69,10 +69,10 @@ public class DwdTradeOrderRefund extends BaseSQLApp {
                         "and `data`['order_status']='1005' ");
         tEnv.createTemporaryView("order_info", orderInfo);
 
-//        TODO  读取Hbase上的字典表，并映射成表
+//        TODO  5、读取Hbase上的字典表，并映射成表
         FlinkSQlUtil.readHbaseDic(tEnv);
 
-//        TODO  将三表进行lookup join，得到退单事实表数据
+//        TODO  6、将三表进行lookup join，得到退单事实表数据
         Table result = tEnv.sqlQuery("select " +
                 "ri.id," +
                 "ri.user_id," +
@@ -90,14 +90,12 @@ public class DwdTradeOrderRefund extends BaseSQLApp {
                 "ri.refund_amount," +
                 "ri.ts " +
                 "from order_refund_info ri " +
-                "join order_info oi " +
-                "on ri.order_id=oi.id " +
-                "join base_dic for system_time as of ri.pt as dic1 " +
-                "on ri.refund_type=dic1.dic_code " +
-                "join base_dic for system_time as of ri.pt as dic2 " +
-                "on ri.refund_reason_type=dic2.dic_code ");
+                "join order_info oi on ri.order_id=oi.id " +
+                "join base_dic for system_time as of ri.pt as dic1 on ri.refund_type=dic1.dic_code " +
+                "join base_dic for system_time as of ri.pt as dic2 on ri.refund_reason_type=dic2.dic_code "
+        );
 
-//        TODO  创建kafka退单事实表映射表
+//        TODO  7、创建kafka退单事实表映射表
         tEnv.executeSql("create table "+Constant.TOPIC_DWD_TRADE_ORDER_REFUND+"(" +
                 "id string," +
                 "user_id string," +
@@ -117,7 +115,7 @@ public class DwdTradeOrderRefund extends BaseSQLApp {
                 "primary key(id) not enforced " +
                 ")"+FlinkSQlUtil.getUpsetKafkaDDLSink(Constant.TOPIC_DWD_TRADE_ORDER_REFUND));
 
-//        TODO  将数据插入到退单事实表映射表去
+//        TODO  8、将数据插入到退单事实表映射表去
         result.executeInsert(Constant.TOPIC_DWD_TRADE_ORDER_REFUND);
 
     }

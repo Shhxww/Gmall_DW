@@ -46,12 +46,14 @@ public class DwsTradePaymentSucWindow extends BaseApp {
 
     @Override
     public void handle(StreamExecutionEnvironment env, DataStreamSource<String> kafkaDS) {
-//        TODO
+//        TODO  1、读取支付事实表
         SingleOutputStreamOperator<JSONObject> jsonObj = kafkaDS.map(JSONObject::parseObject);
-//        TODO
-        jsonObj.print();
+
+//        TODO  2、按照用户id进行分类
+//        jsonObj.print();
         KeyedStream<JSONObject, String> keyedDS = jsonObj.keyBy(jsonobj -> jsonobj.getString("user_id"));
-//        TODO
+
+//        TODO  3、对数据进行标记
         SingleOutputStreamOperator<TradePaymentBean> beanDS = keyedDS.process(new KeyedProcessFunction<String, JSONObject, TradePaymentBean>() {
 
             private ValueState<String> lastPayDateState;
@@ -87,16 +89,18 @@ public class DwsTradePaymentSucWindow extends BaseApp {
 
             }
         });
-//        TODO
+
+//        TODO  4、设置水位线
         SingleOutputStreamOperator<TradePaymentBean> beanWm = beanDS
                 .assignTimestampsAndWatermarks(
                         WatermarkStrategy
                                 .<TradePaymentBean>forBoundedOutOfOrderness(Duration.ofSeconds(3))
                                 .withTimestampAssigner((bs, ts) -> bs.getTs())
                 );
-//        TODO
+//        TODO  5、开窗
         AllWindowedStream<TradePaymentBean, TimeWindow> beanWindows = beanWm.windowAll(TumblingEventTimeWindows.of(Time.seconds(10)));
-//        TODO
+
+//        TODO  6、聚合
         SingleOutputStreamOperator<TradePaymentBean> result = beanWindows.reduce(
                 new ReduceFunction<TradePaymentBean>() {
                     @Override
@@ -117,12 +121,9 @@ public class DwsTradePaymentSucWindow extends BaseApp {
                     }
                 }
         );
-//        TODO
-        result.print();
+//        TODO  7、输出到Doris
+//        result.print();
         result.map(new DorisMapFunction<>()).sinkTo(FlinkSinkUtil.getDorisSink("gmall.dws_trade_payment_suc_window"));
-//        TODO
-//        TODO
-//        TODO
-//        TODO
+
     }
 }

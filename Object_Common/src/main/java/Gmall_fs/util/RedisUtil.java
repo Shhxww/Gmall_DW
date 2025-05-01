@@ -89,7 +89,6 @@ public static StatefulRedisConnection<String, String> getRedisAsyncConnection() 
 
 /**
  * 关闭 redis 的异步连接
- *
  * @param redisAsyncConn
  */
 public static void closeRedisAsyncConnection(StatefulRedisConnection<String, String> redisAsyncConn) {
@@ -107,18 +106,19 @@ public static void closeRedisAsyncConnection(StatefulRedisConnection<String, Str
  * @return 读取到维度数据,封装的 json 对象中
  */
 public static JSONObject readDimAsync(
-        StatefulRedisConnection<String, String> redisAsyncConn,
-                                      String tableName,
-                                      String id
-) {
+                                        StatefulRedisConnection<String, String> redisAsyncConn,
+                                        String tableName,
+                                        String id
+                                        ) {
     RedisAsyncCommands<String, String> asyncCommand = redisAsyncConn.async();
     String key = getKey(tableName, id);
     try {
+//        读取缓存中的数据
         String json = asyncCommand.get(key).get();
+//        若读到了就直接返回，若转换失败就直接跳过报错，返回空值
         if (json != null) {
             return JSON.parseObject(json);
         }
-
     } catch (Exception e) {
         throw new RuntimeException(e);
     }
@@ -132,17 +132,13 @@ public static JSONObject readDimAsync(
  * @param id id 的值
  * @param dim 要写入的维度数据
  */
-public static void writeDimAsync(StatefulRedisConnection<String, String> redisAsyncConn,
-                                 String tableName,
-                                 String id,
-                                 JSONObject dim
-) {
+public static void writeDimAsync(StatefulRedisConnection<String, String> redisAsyncConn, String tableName, String id, JSONObject dim) {
     String key = getKey(tableName, id);
 
     // 1. 得到异步命令
     RedisAsyncCommands<String, String> asyncCommand = redisAsyncConn.async();
 
-    // 2. 写入: 设置的 ttl
+    // 2. 写入并设置 ttl
     asyncCommand.setex(key, 24*60*60L, dim.toJSONString());
 
 }

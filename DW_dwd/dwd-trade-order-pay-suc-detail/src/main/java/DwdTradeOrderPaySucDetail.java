@@ -8,10 +8,10 @@ import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import java.time.Duration;
 
 /**
- * @基本功能:
+ * @基本功能:   交易域--支付事实表（一次成功的支付操作里的一种商品）
  * @program:Gmall_DW
  * @author: B1ue
- * @createTime:2025-04-15 15:54:00
+ * @createTime:2025-04-16 08:24:00
  * 启动zk、kafka、maxwell
  * 运行DwdTradeOrderDetail及 DwdTradeOrderPaySucDetail
  **/
@@ -19,6 +19,7 @@ import java.time.Duration;
 public class DwdTradeOrderPaySucDetail extends BaseSQLApp {
 
     public static void main(String[] args) {
+//        启动程序
         new DwdTradeOrderPaySucDetail().start(
                 10016,
                 4,
@@ -28,13 +29,13 @@ public class DwdTradeOrderPaySucDetail extends BaseSQLApp {
 
     @Override
     public void handle(StreamExecutionEnvironment env, StreamTableEnvironment tEnv) {
-//        TODO  设置ttl，防止延迟
+//        TODO  1、设置ttl，防止延迟
         tEnv.getConfig().setIdleStateRetention(Duration.ofSeconds(5));
 
-//        TODO  读取kafka上的业务数据，映射成topic_db表
+//        TODO  2、读取kafka上的业务数据，映射成topic_db表
         FlinkSQlUtil.readOdsData(tEnv,Constant.TOPIC_DWD_TRADE_ORDER_PAYMENT_SUCCESS);
 
-//        TODO  过滤出支付表的数据，映射成表
+//        TODO  3、过滤出支付表的数据，映射成表
         Table paymentInfo = tEnv.sqlQuery("select " +
                 "data['user_id'] user_id," +
                 "data['order_id'] order_id," +
@@ -51,7 +52,7 @@ public class DwdTradeOrderPaySucDetail extends BaseSQLApp {
                 "and `data`['payment_status']='1602' ");
         tEnv.createTemporaryView("payment_info", paymentInfo);
 
-//        TODO  读取下单事实表，映射成表
+//        TODO  4、读取下单事实表，映射成表
         tEnv.executeSql("create table "+Constant.TOPIC_DWD_TRADE_ORDER_DETAIL+"(" +
                 "id string," +
                 "order_id string," +
@@ -75,10 +76,10 @@ public class DwdTradeOrderPaySucDetail extends BaseSQLApp {
                 "watermark for et as et - interval '3' second " + //设置水位线，乱序程度为3s
                 ")"+FlinkSQlUtil.getKafkaDDLSource(Constant.TOPIC_DWD_TRADE_ORDER_DETAIL,Constant.TOPIC_DWD_TRADE_ORDER_PAYMENT_SUCCESS));
 
-//        TODO  读取Hbase上的字典表，映射为
+//        TODO  读取Hbase上的字典表
         FlinkSQlUtil.readHbaseDic(tEnv);
 
-//        TODO  将支付表与下单事实表进行inter join，再与字典表进行 look join
+//        TODO  将支付表与下单事实表进行inevter join，再与字典表进行 lookup join
         Table result = tEnv.sqlQuery("select " +
                 "od.id order_detail_id," +
                 "od.order_id," +

@@ -16,6 +16,12 @@ import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.CheckpointConfig;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 
+/**
+ * @基本功能:   FlinkAPi基类
+ * @program:Gmall_DW
+ * @author: B1ue
+ * @createTime:2025-04-13 20:38:54
+ **/
 
 public abstract class BaseApp {
     /**
@@ -67,7 +73,7 @@ public abstract class BaseApp {
         }
 
     }
-
+//    TODO  4、重写处理函数
     /**
      * 处理函数
      * @param env Flink流数据运行环境

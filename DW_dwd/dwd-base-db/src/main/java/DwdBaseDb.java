@@ -28,7 +28,7 @@ import java.util.HashMap;
 import java.util.List;
 
 /**
- * @基本功能:
+ * @基本功能:   事实表动态分流：工具域--优惠劵领取使用、活动参与事实表、用户域--用户注册
  * @program:Gmall_DW
  * @author: B1ue
  * @createTime:2025-04-16 08:47:08
@@ -37,6 +37,7 @@ import java.util.List;
 public class DwdBaseDb extends BaseApp {
 
     public static void main(String[] args) {
+//        启动程序
         new DwdBaseDb().start(
                 10019,
                 4,
@@ -62,7 +63,7 @@ public class DwdBaseDb extends BaseApp {
 //                          }
 //          }
 
-//        TODO  将jsonStr转化为jsonObj
+//        TODO  1、将jsonStr转化为jsonObj
         SingleOutputStreamOperator<JSONObject> etlStream = kafkaDS.map(
                 new MapFunction<String, JSONObject>() {
                     @Override
@@ -77,30 +78,11 @@ public class DwdBaseDb extends BaseApp {
                 }
         ).setParallelism(1);
 
-//        TODO  读取配置流信息
+//        TODO  2、读取配置流信息
         MySqlSource<String> MySqlSource = FlinkSourceUtil.getMySqlSource("gmall_config","table_process_dwd") ;
 
-//        TODO  对配置流进行转换成流
-        DataStreamSource<String> msource = env.fromSource(MySqlSource, WatermarkStrategy.noWatermarks(), "MySQLsource");
-//        {
-//          "before":null,
-//          "after":{"source_table":"user_info","source_type":"insert","sink_table":"dwd_user_register","sink_columns":"id,create_time"},
-//          "source":{
-//                          "version":"1.9.7.Final",
-//                          "connector":"mysql",
-//                          "name":"mysql_binlog_source",
-//                          "ts_ms":0,
-//                          "snapshot":"false",
-//                          "db":"gmall_config",
-//                          "sequence":null,
-//                          "table":"table_process_dwd",
-//                          "server_id":0,
-//                          "gtid":null,"file":"","pos":0,"row":0,"thread":null,"query":null
-//                          },
-//          "op":"r",
-//          "ts_ms":1744813448269,
-//          "transaction":null}
-
+//        TODO  3、对配置流进行转换成流
+        DataStreamSource<String> msource = env.fromSource(MySqlSource, WatermarkStrategy.noWatermarks(), "MySQLsource").setParallelism(1);
         SingleOutputStreamOperator<TableProcessDwd> tpDS = msource.map(new RichMapFunction<String, TableProcessDwd>() {
             @Override
             public TableProcessDwd map(String jsonStr) throws Exception {
@@ -121,31 +103,30 @@ public class DwdBaseDb extends BaseApp {
             }
         });
 
-//        TODO  创建广播流描述器
+//        TODO  4、创建广播流描述器
         MapStateDescriptor<String, TableProcessDwd> broadcastDs = new MapStateDescriptor<>("broadcastDs", String.class, TableProcessDwd.class);
 
-//        TODO  将配置流转化为广播流
+//        TODO  5、将配置流转化为广播流
         BroadcastStream<TableProcessDwd> broadcast = tpDS.broadcast(broadcastDs);
 
-//        TODO  主流联合广播流
+//        TODO  6、主流联合广播流
         SingleOutputStreamOperator<Tuple2<JSONObject, TableProcessDwd>> dataWithConfigStream =
-        etlStream.connect(broadcast).process(
-                new BroadcastProcessFunction<JSONObject, TableProcessDwd, Tuple2<JSONObject,TableProcessDwd>>() {
+        etlStream.connect(broadcast).process(new BroadcastProcessFunction<JSONObject, TableProcessDwd, Tuple2<JSONObject,TableProcessDwd>>() {
 
             private HashMap<String, TableProcessDwd> map;
-
             @Override
             public void open(Configuration parameters) throws Exception {
-                // open 中没有办法访问状态!!!
-                        map = new HashMap<>();
-                        // 1. 去 mysql 中查询 table_process 表所有数据
-                        java.sql.Connection mysqlConn = JdbcUtil.getMysqlConnection();
-                        List<TableProcessDwd> tableProcessDwdList = JdbcUtil.queryList(mysqlConn,
-                                "select * from gmall_config.table_process_dwd",
-                                TableProcessDwd.class,
-                                true
+//                 open 中没有办法访问状态，初始化一个map，让开始到来的数据也可以进行匹配
+                 map = new HashMap<>();
+//                获取mysql连接
+                java.sql.Connection mysqlConn = JdbcUtil.getMysqlConnection();
+//                去 mysql 中查询 table_process 表所有数据
+                List<TableProcessDwd> tableProcessDwdList = JdbcUtil.queryList(
+                        mysqlConn,
+                        "select * from gmall_config.table_process_dwd",
+                        TableProcessDwd.class,
+                        true
                         );
-
                         for (TableProcessDwd tableProcessDwd : tableProcessDwdList) {
                             String key = getKey(tableProcessDwd.getSourceTable(), tableProcessDwd.getSourceType());
                             map.put(key, tableProcessDwd);
@@ -153,6 +134,7 @@ public class DwdBaseDb extends BaseApp {
                         JdbcUtil.closeConnection(mysqlConn);
             }
 
+//            对数据流进行处理
             @Override
             public void processElement(JSONObject jsonObj, BroadcastProcessFunction<JSONObject, TableProcessDwd, Tuple2<JSONObject, TableProcessDwd>>.ReadOnlyContext context, Collector<Tuple2<JSONObject, TableProcessDwd>> out) throws Exception {
                 ReadOnlyBroadcastState<String, TableProcessDwd> state = context.getBroadcastState(broadcastDs);
@@ -171,31 +153,36 @@ public class DwdBaseDb extends BaseApp {
 
         }
 
+//            更新广播流配置
             @Override
-                    public void processBroadcastElement(TableProcessDwd tableProcessDwd, Context context, Collector<Tuple2<JSONObject, TableProcessDwd>> out) throws Exception {
-                        BroadcastState<String, TableProcessDwd> state = context.getBroadcastState(broadcastDs);
-                        String key = getKey(tableProcessDwd.getSourceTable(), tableProcessDwd.getSourceType());
+            public void processBroadcastElement(TableProcessDwd tableProcessDwd, Context context, Collector<Tuple2<JSONObject, TableProcessDwd>> out) throws Exception {
+                BroadcastState<String, TableProcessDwd> state = context.getBroadcastState(broadcastDs);
+                String key = getKey(tableProcessDwd.getSourceTable(), tableProcessDwd.getSourceType());
+                if ("d".equals(tableProcessDwd.getOp())) {
+                    // 删除状态
+                    state.remove(key);
+                    // map中的配置也要删除
+                    map.remove(key);
+                } else {
+                    // 更新或者添加状态
+                    state.put(key, tableProcessDwd);
+                }
+            }
 
-                        if ("d".equals(tableProcessDwd.getOp())) {
-                            // 删除状态
-                            state.remove(key);
-                            // map中的配置也要删除
-                            map.remove(key);
-                        } else {
-                            // 更新或者添加状态
-                            state.put(key, tableProcessDwd);
-                        }
-                    }
-
-            private String getKey(String source_table, String sourceType) {
-        return source_table + ":" + sourceType;
+                    /**
+                     * 获取key
+                     * @param source_table
+                     * @param sourceType
+                     * @return
+                     */
+        private String getKey(String source_table, String sourceType) {
+            return source_table + ":" + sourceType;
                  }
 
         });
 
-//        TODO  将其写到kafka上
+//        TODO  7、将其写到kafka上
         dataWithConfigStream.sinkTo(FlinkSinkUtil.getKafkaSink());
-
     }
 
 

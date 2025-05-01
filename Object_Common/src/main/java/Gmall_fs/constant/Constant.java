@@ -1,5 +1,8 @@
 package Gmall_fs.constant;
 
+/**
+ * 参数列表
+ */
 public class Constant {
     public static final String KAFKA_BROKERS = "node1:9092,node2:9092,node3:9092";
 
