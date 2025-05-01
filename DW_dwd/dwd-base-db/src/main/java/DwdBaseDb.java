@@ -129,7 +129,8 @@ public class DwdBaseDb extends BaseApp {
 
 //        TODO  主流联合广播流
         SingleOutputStreamOperator<Tuple2<JSONObject, TableProcessDwd>> dataWithConfigStream =
-        etlStream.connect(broadcast).process(new BroadcastProcessFunction<JSONObject, TableProcessDwd, Tuple2<JSONObject,TableProcessDwd>>() {
+        etlStream.connect(broadcast).process(
+                new BroadcastProcessFunction<JSONObject, TableProcessDwd, Tuple2<JSONObject,TableProcessDwd>>() {
 
             private HashMap<String, TableProcessDwd> map;
 
