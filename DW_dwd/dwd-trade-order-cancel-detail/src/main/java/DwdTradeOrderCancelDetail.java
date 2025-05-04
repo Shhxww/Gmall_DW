@@ -8,14 +8,14 @@ import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import java.time.Duration;
 
 /**
- * @基本功能:
+ * @基本功能:   交易域--取消订单事实表（取消订单里的一种商品）
  * @program:Gmall_DW
  * @author: B1ue
- * @createTime:2025-04-15 15:42:14
+ * @createTime:2025-04-15 16:42:14
  **/
 
 public class DwdTradeOrderCancelDetail extends BaseSQLApp {
-
+//    启动程序
     public static void main(String[] args) {
         new DwdTradeOrderCancelDetail().start(
                 10015,
@@ -25,13 +25,13 @@ public class DwdTradeOrderCancelDetail extends BaseSQLApp {
 
     @Override
     public void handle(StreamExecutionEnvironment env, StreamTableEnvironment tEnv) {
-//        TODO  设置ttl，防止延迟
+//        TODO  1、设置ttl，防止延迟
         tEnv.getConfig().setIdleStateRetention(Duration.ofSeconds(5));
 
-//        TODO  读取kafka上的业务数据，映射为topic_db表
+//        TODO  2、读取kafka上的业务数据，映射为topic_db表
         FlinkSQlUtil.readOdsData(tEnv,Constant.TOPIC_DWD_TRADE_ORDER_CANCEL);
 
-//        TODO  过滤出取消订单表的数据，并映射成order_cancel表
+//        TODO  3、过滤出取消订单表的数据，并映射成order_cancel表
         Table orderCancel = tEnv.sqlQuery("select " +
                 " `data`['id'] id, " +
                 " `data`['operate_time'] operate_time, " +
@@ -67,7 +67,8 @@ public class DwdTradeOrderCancelDetail extends BaseSQLApp {
                 ")" + FlinkSQlUtil.getKafkaDDLSource(Constant.TOPIC_DWD_TRADE_ORDER_DETAIL,Constant.TOPIC_DWD_TRADE_ORDER_CANCEL));
 
 //        TODO  两表进行join，得到取消订单事实表数据
-        Table result = tEnv.sqlQuery("select  " +
+        Table result = tEnv.sqlQuery(
+                "select  " +
                 "od.id," +
                 "od.order_id," +
                 "od.user_id," +
@@ -85,9 +86,10 @@ public class DwdTradeOrderCancelDetail extends BaseSQLApp {
                 "od.split_coupon_amount," +
                 "od.split_total_amount," +
                 "oc.ts " +
-                "from dwd_trade_order_detail od " +
+                "from "+Constant.TOPIC_DWD_TRADE_ORDER_DETAIL+" od " +
                 "join order_cancel oc " +
-                "on od.order_id=oc.id ");
+                "on od.order_id=oc.id "
+        );
 
 //        TODO  创建kafka取消订单事实表映射表
         tEnv.executeSql("create table "+Constant.TOPIC_DWD_TRADE_ORDER_CANCEL+"(" +

@@ -54,16 +54,16 @@ public class FlinkSourceUtil {
 
     /**
      * 获取mysql连接
-     * @param database
-     * @param table
-     * @return
+     * @param database  读取数据库名
+     * @param table         读取的表名
+     * @return      mysql连接
      */
     public static MySqlSource<String> getMySqlSource(String database, String table ){
-        //       4.1    配置mysqlcdc
+//         配置mysqlcdc
         Properties jdbcProperties = new Properties();
         jdbcProperties.setProperty("useSSL", "false");
         jdbcProperties.setProperty("allowPublicKeyRetrieval", "true");
-//        4.2   配置mysql设置
+//        配置mysql设置
         MySqlSource<String> mySqlSource = MySqlSource
                 .<String>builder()
                 .hostname(Constant.MYSQL_HOST)
@@ -77,11 +77,8 @@ public class FlinkSourceUtil {
                 .deserializer(new JsonDebeziumDeserializationSchema())
                 .build();
 
+//        返回mysql数据源
         return mySqlSource;
-
-
     }
-
-
 
 }

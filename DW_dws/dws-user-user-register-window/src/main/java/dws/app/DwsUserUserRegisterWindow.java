@@ -23,7 +23,7 @@ import org.apache.flink.util.Collector;
 import java.time.Duration;
 
 /**
- * @基本功能:
+ * @基本功能:   用户注册窗口汇总表
  * @program:Gmall_DW
  * @author: B1ue
  * @createTime:2025-04-23 20:16:59
@@ -32,6 +32,7 @@ import java.time.Duration;
 public class DwsUserUserRegisterWindow extends BaseApp {
 
     public static void main(String[] args) {
+//         启动程序
          new DwsUserUserRegisterWindow().start(
                 10025,
                 4,
@@ -42,17 +43,17 @@ public class DwsUserUserRegisterWindow extends BaseApp {
 
     @Override
     public void handle(StreamExecutionEnvironment env, DataStreamSource<String> kafkaDS) {
-//        TODO
+//        TODO  1、读取用户注册事实表数据，并转换为jsonObj
         SingleOutputStreamOperator<JSONObject> jsonObj = kafkaDS.map(JSONObject::parseObject);
-//        TODO
+//        TODO  2、设置水位线
         SingleOutputStreamOperator<JSONObject> dS = jsonObj.assignTimestampsAndWatermarks(
                 WatermarkStrategy
                         .<JSONObject>forBoundedOutOfOrderness(Duration.ofSeconds(3))
                         .withTimestampAssigner((jsO, ts) -> jsO.getLong("create_time"))
         );
-//        TODO
+//        TODO  3、开窗
         AllWindowedStream<JSONObject, TimeWindow> jsonWindows = dS.windowAll(TumblingEventTimeWindows.of(Time.seconds(10)));
-//        TODO
+//        TODO  4、聚合
         SingleOutputStreamOperator<UserRegisterBean> aggregate =
             jsonWindows.aggregate(new AggregateFunction<JSONObject, Long, Long>() {
                                 @Override
@@ -92,8 +93,7 @@ public class DwsUserUserRegisterWindow extends BaseApp {
                                 }
                             }
                     );
-//        TODO
-        aggregate.print();
+//        TODO  5、输出到Doris
         aggregate
                 .map(new DorisMapFunction<>())
                 .sinkTo(FlinkSinkUtil.getDorisSink("gmall.dws_user_user_register_window"));

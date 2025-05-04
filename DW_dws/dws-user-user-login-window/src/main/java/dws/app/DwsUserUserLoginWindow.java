@@ -39,6 +39,7 @@ import java.time.Duration;
 public class DwsUserUserLoginWindow extends BaseApp {
 
     public static void main(String[] args) {
+//        启动程序
         new DwsUserUserLoginWindow().start(
                 10024,
                 4,
@@ -49,7 +50,7 @@ public class DwsUserUserLoginWindow extends BaseApp {
 
     @Override
     public void handle(StreamExecutionEnvironment env, DataStreamSource<String> kafkaDS) {
-//        TODO
+//        TODO  1、读取用户登录明细事实表数据包，并进行清洗转化
         SingleOutputStreamOperator<JSONObject> jsonObj = kafkaDS.process(new ProcessFunction<String, JSONObject>() {
             @Override
             public void processElement(String jsonstr, ProcessFunction<String, JSONObject>.Context ctx, Collector<JSONObject> out) throws Exception {
@@ -61,9 +62,9 @@ public class DwsUserUserLoginWindow extends BaseApp {
                 }
             }
         });
-//        TODO
+//        TODO  2、按照uid进行分组
         KeyedStream<JSONObject, String> keyedDS = jsonObj.keyBy(obj -> obj.getJSONObject("common").getString("uid"));
-//        TODO
+//        TODO  3、进行回流用户，新用户标记标记
         SingleOutputStreamOperator<UserLoginBean> beanDS = keyedDS.process(new KeyedProcessFunction<String, JSONObject, UserLoginBean>() {
 
             private ValueState<String> lastLoginDateState;
@@ -100,11 +101,11 @@ public class DwsUserUserLoginWindow extends BaseApp {
                 }
             }
         });
-//        TODO
+//        TODO  4、设置水位线
         SingleOutputStreamOperator<UserLoginBean> beanWM = beanDS.assignTimestampsAndWatermarks(WatermarkStrategy.<UserLoginBean>forBoundedOutOfOrderness(Duration.ofSeconds(3)).withTimestampAssigner((bs, ts) -> bs.getTs()));
-//        TODO
+//        TODO  5、开窗
         AllWindowedStream<UserLoginBean, TimeWindow> beanWindows = beanWM.windowAll(TumblingEventTimeWindows.of(Time.seconds(10L)));
-//        TODO
+//        TODO  6、聚合
         SingleOutputStreamOperator<UserLoginBean> result = beanWindows.reduce(new ReduceFunction<UserLoginBean>() {
             @Override
             public UserLoginBean reduce(UserLoginBean value1, UserLoginBean value2) throws Exception {
@@ -122,8 +123,8 @@ public class DwsUserUserLoginWindow extends BaseApp {
                 out.collect(bean);
             }
         });
-//        TODO
-        result.print();
+//        TODO  7、输出到Doris
+//        result.print();
         result.map(new DorisMapFunction<>()).sinkTo(FlinkSinkUtil.getDorisSink("gmall.dws_user_user_login_window"));
     }
 }

@@ -30,7 +30,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
- * @基本功能:
+ * @基本功能:   交易域--各省份下单窗口汇总表
  * @program:Gmall_DW
  * @author: B1ue
  * @createTime:2025-04-23 22:08:29
@@ -49,7 +49,7 @@ public class DwsTradeProvinceOrderWindow extends BaseApp {
 
     @Override
     public void handle(StreamExecutionEnvironment env, DataStreamSource<String> kafkaDS) {
-//        TODO  读取订单明细实时表数据，转换为统计类型
+//        TODO  1、读取订单明细实时表数据，转换为统计类型
         SingleOutputStreamOperator<TradeProvinceOrderBean> beanDS = kafkaDS.process(new ProcessFunction<String, TradeProvinceOrderBean>() {
             @Override
             public void processElement(String jsonStr, ProcessFunction<String, TradeProvinceOrderBean>.Context ctx, Collector<TradeProvinceOrderBean> out) throws Exception {
@@ -68,9 +68,9 @@ public class DwsTradeProvinceOrderWindow extends BaseApp {
                 );
             }
         });
-//        TODO  按照订单明细id进行分组
+//        TODO  2、按照订单明细id进行分组
         KeyedStream<TradeProvinceOrderBean, String> beankeyed = beanDS.keyBy(bs -> bs.getOrderDetailId()) ;
-//        TODO  进行去重
+//        TODO  3、进行去重
         SingleOutputStreamOperator<TradeProvinceOrderBean> beanDis = beankeyed.process(new ProcessFunction<TradeProvinceOrderBean, TradeProvinceOrderBean>() {
 
             private ValueState<TradeProvinceOrderBean> lastState;
@@ -98,13 +98,13 @@ public class DwsTradeProvinceOrderWindow extends BaseApp {
                 }
             }
         });
-//        TODO
+//        TODO  4、设置水位线
         SingleOutputStreamOperator<TradeProvinceOrderBean> beanWM = beanDis.assignTimestampsAndWatermarks(WatermarkStrategy.<TradeProvinceOrderBean>forBoundedOutOfOrderness(Duration.ofSeconds(3)).withTimestampAssigner((bs, ts) -> bs.getTs()));
-//        TODO
+//        TODO  5、按照各省份id分组
         KeyedStream<TradeProvinceOrderBean, String> beanK = beanWM.keyBy(TradeProvinceOrderBean::getProvinceId);
-//        TODO
+//        TODO  6、开窗
         WindowedStream<TradeProvinceOrderBean, String, TimeWindow> beanWindows = beanK.window(TumblingEventTimeWindows.of(org.apache.flink.streaming.api.windowing.time.Time.seconds(10)));
-//        TODO
+//        TODO  7、聚合
         SingleOutputStreamOperator<TradeProvinceOrderBean> reduce = beanWindows.reduce(
                 new ReduceFunction<TradeProvinceOrderBean>() {
                     @Override
@@ -115,6 +115,7 @@ public class DwsTradeProvinceOrderWindow extends BaseApp {
                     }
                 },
                 new ProcessWindowFunction<TradeProvinceOrderBean, TradeProvinceOrderBean, String, TimeWindow>() {
+
                     @Override
                     public void process(String s, ProcessWindowFunction<TradeProvinceOrderBean, TradeProvinceOrderBean, String, TimeWindow>.Context context, Iterable<TradeProvinceOrderBean> elements, Collector<TradeProvinceOrderBean> out) throws Exception {
                         TradeProvinceOrderBean bs = elements.iterator().next();
@@ -124,9 +125,10 @@ public class DwsTradeProvinceOrderWindow extends BaseApp {
                         bs.setOrderCount((long) bs.getOrderIdSet().size());
                         out.collect(bs);
                     }
+
                 }
         );
-//        TODO
+//        TODO  8、进行维度关联
         SingleOutputStreamOperator<TradeProvinceOrderBean> result = AsyncDataStream.unorderedWait(
                 reduce,
                 new AsyncDimFunction<TradeProvinceOrderBean>() {
@@ -150,7 +152,7 @@ public class DwsTradeProvinceOrderWindow extends BaseApp {
                 60,
                 TimeUnit.SECONDS
         );
-//        TODO
+//        TODO  9、写入Doris
         result.map(new DorisMapFunction<>()).sinkTo(FlinkSinkUtil.getDorisSink("gmall.dws_trade_province_order_window"));
     }
 }

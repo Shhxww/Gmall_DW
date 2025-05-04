@@ -29,11 +29,13 @@ public class FlinkSinkUtil {
         KafkaSink<String> kafkaSink = KafkaSink
                 .<String>builder()
                 .setBootstrapServers(Constant.KAFKA_BROKERS)
-                .setRecordSerializer(KafkaRecordSerializationSchema
+                .setRecordSerializer(
+                        KafkaRecordSerializationSchema
                         .<String>builder()
                         .setTopic(topic)
                         .setValueSerializationSchema(new SimpleStringSchema())
-                        .build())
+                        .build()
+                )
 //                .setDeliveryGuarantee(DeliveryGuarantee.EXACTLY_ONCE)
 //                .setTransactionalIdPrefix(topic+"_")
 //                .setProperty("transaction.timeout.ms", 15 * 60 * 1000 + "")
@@ -41,13 +43,17 @@ public class FlinkSinkUtil {
         return kafkaSink;
     }
 
+
     public static Sink<Tuple2<JSONObject, TableProcessDwd>> getKafkaSink() {
     return KafkaSink.<Tuple2<JSONObject, TableProcessDwd>>builder()
             .setBootstrapServers(Constant.KAFKA_BROKERS)
-            .setRecordSerializer(new KafkaRecordSerializationSchema<Tuple2<JSONObject, TableProcessDwd>>() {
+            .setRecordSerializer(
+//                    自定义序列化器
+                    new KafkaRecordSerializationSchema<Tuple2<JSONObject, TableProcessDwd>>() {
                 @Nullable
                 @Override
-                public ProducerRecord<byte[], byte[]> serialize(Tuple2<JSONObject, TableProcessDwd> dataWithConfig,
+                public ProducerRecord<byte[], byte[]> serialize(
+                                                                Tuple2<JSONObject, TableProcessDwd> dataWithConfig,
                                                                 KafkaSinkContext context,
                                                                 Long timestamp) {
                     String topic = dataWithConfig.f1.getSinkTable();
@@ -62,6 +68,11 @@ public class FlinkSinkUtil {
             .build();
 }
 
+    /**
+     * 获取Doris输出类
+     * @param table 目标表名
+     * @return Doris输出类
+     */
     public static DorisSink<String> getDorisSink(String table) {
     Properties props = new Properties();
     props.setProperty("format", "json");
@@ -76,8 +87,8 @@ public class FlinkSinkUtil {
                     .build()
             )
             .setDorisExecutionOptions(DorisExecutionOptions.builder() // 执行参数
-//                    .setLabelPrefix(labelPrefix)  // stream-load 导入数据时 label 的前缀
-//                    .disable2PC() // 开启两阶段提交后,labelPrefix 需要全局唯一,为了测试方便禁用两阶段提交
+//                    .setLabelPrefix()  // stream-load 导入数据时 label 的前缀
+                    .disable2PC() // 开启两阶段提交后,labelPrefix 需要全局唯一,为了测试方便禁用两阶段提交
                     .setBufferCount(3) // 批次条数: 默认 3
                     .setBufferSize(1024 * 1024) // 批次大小: 默认 1M
                     .setCheckInterval(3000) // 批次输出间隔  上述三个批次的限制条件是或的关系

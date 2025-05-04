@@ -8,6 +8,13 @@ import org.apache.flink.streaming.api.environment.CheckpointConfig;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 
+/**
+ * @基本功能:   FlinkSQL基类
+ * @program:Gmall_DW
+ * @author: B1ue
+ * @createTime:2025-04-14 07:48:54
+ **/
+
 public abstract class BaseSQLApp {
     /**
      * 启动程序
@@ -40,7 +47,7 @@ public abstract class BaseSQLApp {
         env.getCheckpointConfig().setCheckpointStorage("hdfs://node1:8020/Flink_checkpoint/"+ck_path);
 //        2.5   设置重启策略（每3s重启一次，30天内仅能重启三次）
         env.setRestartStrategy(RestartStrategies.failureRateRestart(1, Time.days(3),Time.seconds(3)));
-
+//        2.6   进行处理
         handle(env,tEnv);
 
     }

@@ -8,26 +8,26 @@ import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import java.time.Duration;
 
 /**
- * @基本功能:
+ * @基本功能:   交易域--下单事实表（下单订单里的一种商品）
  * @program:Gmall_DW
  * @author: B1ue
- * @createTime:2025-04-15 10:54:15
+ * @createTime:2025-04-15 07:54:15
  **/
 
 public class DwdTradeOrderDetail extends BaseSQLApp {
-
+//    启动程序
     public static void main(String[] args) {
         new DwdTradeOrderDetail().start(10014,4, Constant.TOPIC_DWD_TRADE_ORDER_DETAIL);
     }
 
     @Override
     public void handle(StreamExecutionEnvironment env, StreamTableEnvironment tEnv) {
-//        TODO  设置订单状态保留时间
+//        TODO  1、设置订单表状态保留时间
         tEnv.getConfig().setIdleStateRetention(Duration.ofSeconds(30));
-//        TODO  读取kafka上的业务数据，映射成topic_db动态表
+//        TODO  2、读取kafka上的业务数据，映射成topic_db动态表
         FlinkSQlUtil.readOdsData(tEnv,Constant.TOPIC_DWD_TRADE_ORDER_DETAIL);
-//        TODO  过滤出 订单明细表，订单表，订单明细活动表，订单明细优惠劵表
-        // 1. 过滤出 order_detail 数据: insert
+//        TODO  3、过滤出 订单明细表，订单表，订单明细活动表，订单明细优惠劵表
+//        1. 过滤出 order_detail 数据: insert
         Table orderDetail = tEnv.sqlQuery(
             "select " +
                 "data['id'] id," +
@@ -50,7 +50,7 @@ public class DwdTradeOrderDetail extends BaseSQLApp {
                 "and `type`='insert' ");
         tEnv.createTemporaryView("order_detail", orderDetail);
 
-        // 2. 过滤出 oder_info 数据: insert
+//        2. 过滤出 oder_info 数据: insert
         Table orderInfo = tEnv.sqlQuery(
             "select " +
                 "data['id'] id," +
@@ -85,7 +85,7 @@ public class DwdTradeOrderDetail extends BaseSQLApp {
                 "and `type`='insert' ");
         tEnv.createTemporaryView("order_detail_coupon", orderDetailCoupon);
 
-//        TODO  订单明细表 join 订单表 left join 活动表 left join 优惠劵表
+//        TODO  5、订单明细表  join 订单表 left join 活动表 left join 优惠劵表
         Table result = tEnv.sqlQuery(
             "select " +
                 "od.id," +
@@ -111,7 +111,7 @@ public class DwdTradeOrderDetail extends BaseSQLApp {
                 "left join order_detail_coupon cou on od.id=cou.order_detail_id"
         );
 
-//        TODO  创建kafka下单事实表映射表
+//        TODO  6、创建kafka下单事实表映射表
         tEnv.executeSql(
             "create table "+Constant.TOPIC_DWD_TRADE_ORDER_DETAIL+"(" +
                 "id string," +
@@ -134,7 +134,7 @@ public class DwdTradeOrderDetail extends BaseSQLApp {
                 "primary key(id) not enforced " +
                 ")" + FlinkSQlUtil.getUpsetKafkaDDLSink(Constant.TOPIC_DWD_TRADE_ORDER_DETAIL));
 
-//        TODO  将宽表的数据插入到下单事实表映射表
+//        TODO  7、将宽表的数据插入到下单事实表映射表
         result.executeInsert(Constant.TOPIC_DWD_TRADE_ORDER_DETAIL);
     }
 }

@@ -25,7 +25,7 @@ import java.util.HashSet;
 import java.util.concurrent.TimeUnit;
 
 /**
- * @基本功能:
+ * @基本功能:   商品退单窗口汇总表
  * @program:Gmall_DW
  * @author: B1ue
  * @createTime:2025-04-23 23:04:02
@@ -44,7 +44,7 @@ public class DwsTradeTrademarkCategoryUserRefundWindow extends BaseApp {
 
     @Override
     public void handle(StreamExecutionEnvironment env, DataStreamSource<String> kafkaDS) {
-//        TODO
+//        TODO  1、读取退单事实表数据，并转化为统计类型
         SingleOutputStreamOperator<TradeTrademarkCategoryUserRefundBean> beanDS = kafkaDS.process(new ProcessFunction<String, TradeTrademarkCategoryUserRefundBean>() {
             @Override
             public void processElement(String jsonstr, ProcessFunction<String, TradeTrademarkCategoryUserRefundBean>.Context ctx, Collector<TradeTrademarkCategoryUserRefundBean> out) throws Exception {
@@ -59,7 +59,7 @@ public class DwsTradeTrademarkCategoryUserRefundWindow extends BaseApp {
                 );
             }
         });
-//        TODO
+//        TODO  2、进行维度关联
         SingleOutputStreamOperator<TradeTrademarkCategoryUserRefundBean> beanWkey = AsyncDataStream.unorderedWait(
                 beanDS,
                 new AsyncDimFunction<TradeTrademarkCategoryUserRefundBean>() {
@@ -82,16 +82,16 @@ public class DwsTradeTrademarkCategoryUserRefundWindow extends BaseApp {
                 60,
                 TimeUnit.SECONDS
         );
-//        TODO
+//        TODO  3、设置水位线
         SingleOutputStreamOperator<TradeTrademarkCategoryUserRefundBean> beanWM = beanWkey.assignTimestampsAndWatermarks(
                 WatermarkStrategy
                         .<TradeTrademarkCategoryUserRefundBean>forBoundedOutOfOrderness(Duration.ofSeconds(3))
                         .withTimestampAssigner((bs, ts) -> bs.getTs()));
-//        TODO
+//        TODO  4、按照用户id分组
         KeyedStream<TradeTrademarkCategoryUserRefundBean, String> beanKeyed = beanWM.keyBy(bean -> bean.getUserId() + "_" + bean.getCategory3Id() + "_" + bean.getTrademarkId());
-//        TODO
+//        TODO  5、开窗
         WindowedStream<TradeTrademarkCategoryUserRefundBean, String, TimeWindow> beanWindows = beanKeyed.window(TumblingEventTimeWindows.of(Time.seconds(10)));
-//        TODO
+//        TODO  6、聚合、添加添加窗口起始时间
         SingleOutputStreamOperator<TradeTrademarkCategoryUserRefundBean> reduce = beanWindows.reduce(
                 new ReduceFunction<TradeTrademarkCategoryUserRefundBean>() {
                     @Override
@@ -120,7 +120,7 @@ public class DwsTradeTrademarkCategoryUserRefundWindow extends BaseApp {
                     }
                 }
         );
-//        TODO
+//        TODO  7、维度关联
         SingleOutputStreamOperator<TradeTrademarkCategoryUserRefundBean> beanDIm_1 = AsyncDataStream.unorderedWait(
                 reduce,
                 new AsyncDimFunction<TradeTrademarkCategoryUserRefundBean>() {
@@ -142,7 +142,6 @@ public class DwsTradeTrademarkCategoryUserRefundWindow extends BaseApp {
                 60,
                 TimeUnit.SECONDS
         );
-//        TODO
         SingleOutputStreamOperator<TradeTrademarkCategoryUserRefundBean> beanDim_2 = AsyncDataStream.unorderedWait(
                 beanDIm_1,
                 new AsyncDimFunction<TradeTrademarkCategoryUserRefundBean>() {
@@ -187,8 +186,6 @@ public class DwsTradeTrademarkCategoryUserRefundWindow extends BaseApp {
                 120,
                 TimeUnit.SECONDS
         );
-
-
         SingleOutputStreamOperator<TradeTrademarkCategoryUserRefundBean> resultStream = AsyncDataStream.unorderedWait(
                 beanDim_3,
                 new AsyncDimFunction<TradeTrademarkCategoryUserRefundBean>() {
@@ -210,7 +207,7 @@ public class DwsTradeTrademarkCategoryUserRefundWindow extends BaseApp {
                 120,
                 TimeUnit.SECONDS
         );
-//        TODO
+//        TODO  8、输出到Doris
         resultStream.map(new DorisMapFunction<>()).sinkTo(FlinkSinkUtil.getDorisSink("gmall.dws_trade_trademark_category_user_refund_window"));
     }
 }

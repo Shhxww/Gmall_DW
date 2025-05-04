@@ -9,7 +9,7 @@ import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import java.time.Duration;
 
 /**
- * @基本功能:
+ * @基本功能:   交易域--退款事实表（一次成功的退款里的一种商品）
  * @program:Gmall_DW
  * @author: B1ue
  * @createTime:2025-04-15 20:16:40
@@ -18,7 +18,7 @@ import java.time.Duration;
  **/
 
 public class DwdTradeRefundPaySucDetail extends BaseSQLApp {
-
+//    启动程序
     public static void main(String[] args) {
         new DwdTradeRefundPaySucDetail().start(10018,4, Constant.TOPIC_DWD_TRADE_REFUND_PAYMENT_SUCCESS);
 
@@ -26,12 +26,12 @@ public class DwdTradeRefundPaySucDetail extends BaseSQLApp {
 
     @Override
     public void handle(StreamExecutionEnvironment env, StreamTableEnvironment tEnv) {
-//        TODO  设置订单状态保留时间
+//        TODO  1、设置状态保留时间
         tEnv.getConfig().setIdleStateRetention(Duration.ofSeconds(30));
-//        TODO  读取kafka上的业务数据，映射成topic_db动态表
+//        TODO  2、读取kafka上的业务数据，映射成topic_db动态表
         FlinkSQlUtil.readOdsData(tEnv,Constant.TOPIC_DWD_TRADE_REFUND_PAYMENT_SUCCESS);
 
-//        TODO  过滤出退款表的数据，并映射成表
+//        TODO  3、过滤出退款表的数据，并映射成表
         Table refundPayment = tEnv.sqlQuery("select " +
                 "data['id'] id," +
                 "data['order_id'] order_id," +
@@ -48,7 +48,7 @@ public class DwdTradeRefundPaySucDetail extends BaseSQLApp {
                 "and `data`['refund_status']='1602'");
         tEnv.createTemporaryView("refund_payment", refundPayment);
 
-//        TODO  过滤出退款成功的订单表数据
+//        TODO  4、过滤出退款成功的订单表数据
         Table orderInfo = tEnv.sqlQuery("select " +
                 "data['id'] id," +
                 "data['user_id'] user_id," +
@@ -61,7 +61,7 @@ public class DwdTradeRefundPaySucDetail extends BaseSQLApp {
 
         tEnv.createTemporaryView("order_info", orderInfo);
 
-//        TODO  过滤出退款成功的退单表数据
+//        TODO  5、过滤出退款成功的退单表数据
                 Table orderRefundInfo = tEnv.sqlQuery(
             "select " +
                 "data['order_id'] order_id," +
@@ -75,10 +75,10 @@ public class DwdTradeRefundPaySucDetail extends BaseSQLApp {
                 "and `data`['refund_status']='0705'");
         tEnv.createTemporaryView("order_refund_info", orderRefundInfo);
 
-//        TODO  读取Hbase上的字典表，并映射成表
+//        TODO  6、读取Hbase上的字典表，并映射成表
         FlinkSQlUtil.readHbaseDic(tEnv);
 
-//        TODO  将4表进行join
+//        TODO  7、将4表进行join
         Table result = tEnv.sqlQuery("select " +
                 "rp.id," +
                 "oi.user_id," +
@@ -93,13 +93,12 @@ public class DwdTradeRefundPaySucDetail extends BaseSQLApp {
                 "rp.total_amount," +
                 "rp.ts " +
                 "from refund_payment rp " +
-                "join order_refund_info ori " +
-                "on rp.order_id=ori.order_id and rp.sku_id=ori.sku_id " +
+                "join order_refund_info ori on rp.order_id=ori.order_id and rp.sku_id=ori.sku_id " +
                 "join order_info oi on rp.order_id=oi.id " +
                 "join base_dic for system_time as of rp.pt as dic on rp.payment_type=dic.dic_code "
         );
 
-//        TODO  创建kafka退款事实表映射表
+//        TODO  8、创建kafka退款事实表映射表
         tEnv.executeSql("create table "+Constant.TOPIC_DWD_TRADE_REFUND_PAYMENT_SUCCESS+"(" +
                 "id string," +
                 "user_id string," +
@@ -116,9 +115,8 @@ public class DwdTradeRefundPaySucDetail extends BaseSQLApp {
                 "primary key(id) not enforced " +
                 ")" + FlinkSQlUtil.getUpsetKafkaDDLSink(Constant.TOPIC_DWD_TRADE_REFUND_PAYMENT_SUCCESS));
 
-//        TODO  将数据写入映射表
+//        TODO  9、将数据写入映射表
         result.executeInsert(Constant.TOPIC_DWD_TRADE_REFUND_PAYMENT_SUCCESS);
-
 
     }
 }

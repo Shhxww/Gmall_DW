@@ -4,6 +4,12 @@ import Gmall_fs.constant.Constant;
 import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 
 public class FlinkSQlUtil {
+    /**
+     * 获取kafka连接器
+     * @param topic 主题
+     * @param groupId   消费组名
+     * @return
+     */
     public static String getKafkaDDLSource(String topic , String groupId ){
         return "with(" +
                             "  'connector' = 'kafka'," +
@@ -16,6 +22,11 @@ public class FlinkSQlUtil {
             ")";
     }
 
+    /**
+     * 获取HBase连接器
+     * @param tablename 目标表名
+     * @return
+     */
     public static String getHbaseDDLSource(String tablename ){
         return  "WITH (" +
                                 " 'connector' = 'hbase-2.2'," +
@@ -26,10 +37,13 @@ public class FlinkSQlUtil {
                                 " 'lookup.partial-cache.max-rows' = '20', " +
                                 " 'lookup.partial-cache.expire-after-access' = '2 hour' " +
                                 ")";
-
-
     }
 
+    /**
+     * 获取upsert-kafka连接器
+     * @param topic 主题
+     * @return
+     */
     public static String getUpsetKafkaDDLSink(String topic ){
         return "with(" +
                             "  'connector' = 'upsert-kafka'," +
@@ -62,6 +76,10 @@ public class FlinkSQlUtil {
         );
     }
 
+    /**
+     * 读取HBase上的字典维度表数据
+     * @param tEnv
+     */
     public static void readHbaseDic(StreamTableEnvironment tEnv){
         tEnv.executeSql("create table base_dic (" +
                                     " dic_code string," +  // 如果字段是原子类型,则表示这个是 rowKey, 字段随意, 字段类型随意

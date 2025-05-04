@@ -26,7 +26,7 @@ import java.time.Duration;
 
 
 /**
- * @基本功能:
+ * @基本功能:   交易域
  * @program:Gmall_DW
  * @author: B1ue
  * @createTime:2025-04-23 20:40:03
